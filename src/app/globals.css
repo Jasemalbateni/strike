@@ -1,26 +1,192 @@
 @import "tailwindcss";
 
+/* ---------- STRIKE brand tokens ---------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: #1c2d5a;
+  --navy-900: #14213f;
+  --navy-700: #24397a;
+  --navy-100: #dfe6f5;
+  --navy-50: #eef2f9;
+  --ice: #4da8ff;
+  --ice-600: #2e8fe8;
+  --ice-100: #e3f1ff;
+  --ice-50: #f1f8ff;
+  --silver: #c7ced9;
+  --silver-200: #e3e8ef;
+  --silver-100: #f4f6fa;
+  --gold: #e7b53c;
+  --gold-100: #fbf0d3;
+  --error: #d64545;
+  --error-100: #fbe4e4;
+  --ink: #1c2d5a;
+  --ink-2: #5a6a8a;
+  --bg: #ffffff;
+  --card: #ffffff;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-navy: var(--navy);
+  --color-navy-900: var(--navy-900);
+  --color-navy-700: var(--navy-700);
+  --color-navy-100: var(--navy-100);
+  --color-navy-50: var(--navy-50);
+  --color-ice: var(--ice);
+  --color-ice-600: var(--ice-600);
+  --color-ice-100: var(--ice-100);
+  --color-ice-50: var(--ice-50);
+  --color-silver: var(--silver);
+  --color-silver-200: var(--silver-200);
+  --color-silver-100: var(--silver-100);
+  --color-gold: var(--gold);
+  --color-gold-100: var(--gold-100);
+  --color-error: var(--error);
+  --color-error-100: var(--error-100);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --font-sans: var(--font-tajawal), system-ui, sans-serif;
+  --font-data: var(--font-barlow), var(--font-tajawal), sans-serif;
+  --font-display: var(--font-bukra), var(--font-tajawal), sans-serif;
+  --radius-card: 14px;
+  --shadow-card: 0 1px 2px rgba(28, 45, 90, 0.06), 0 8px 24px -12px rgba(28, 45, 90, 0.18);
+  --shadow-pop: 0 12px 40px -12px rgba(28, 45, 90, 0.35);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--silver-100);
+  color: var(--ink);
+  font-family: var(--font-tajawal), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* numbers, English, dates → Barlow Condensed */
+.num,
+.en {
+  font-family: var(--font-barlow), var(--font-tajawal), sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-family: var(--font-bukra), var(--font-tajawal), sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--silver) transparent;
+}
+
+::selection {
+  background: var(--ice-100);
+  color: var(--navy);
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* form controls */
+@utility field {
+  @apply w-full rounded-xl border border-silver-200 bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-2/60 outline-none transition focus:border-ice focus:ring-4 focus:ring-ice/15;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[15px] font-bold transition select-none disabled:opacity-50 disabled:pointer-events-none;
+}
+.btn-primary {
+  @apply btn bg-navy text-white hover:bg-navy-700 active:scale-[0.98];
+}
+.btn-accent {
+  @apply btn bg-ice text-navy-900 hover:bg-ice-600 hover:text-white active:scale-[0.98];
+}
+.btn-ghost {
+  @apply btn text-navy hover:bg-navy-50;
+}
+.btn-outline {
+  @apply btn border border-silver-200 bg-white text-navy hover:border-ice hover:bg-ice-50;
+}
+.btn-danger {
+  @apply btn bg-error-100 text-error hover:bg-error hover:text-white;
+}
+
+@utility card {
+  @apply rounded-[14px] bg-white border border-silver-200/80;
+  box-shadow: var(--shadow-card);
+}
+
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold;
+}
+
+/* brand philosophy line */
+.philosophy {
+  letter-spacing: 0.02em;
+}
+
+/* drag preview */
+.dragging {
+  box-shadow: var(--shadow-pop);
+  transform: rotate(-1.5deg) scale(1.02);
+}
+
+/* sticky note colors (brand tints only) */
+.note-ice {
+  background: var(--ice-100);
+  border-color: #b9dcff;
+}
+.note-navy {
+  background: var(--navy-50);
+  border-color: var(--navy-100);
+}
+.note-gold {
+  background: var(--gold-100);
+  border-color: #f2dc9c;
+}
+.note-silver {
+  background: var(--silver-100);
+  border-color: var(--silver-200);
+}
+.note-white {
+  background: #fff;
+  border-color: var(--silver-200);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fade-up {
+  animation: fade-up 0.25s ease-out both;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
 }

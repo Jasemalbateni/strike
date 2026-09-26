@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# STRIKE — بوابة الفريق
 
-## Getting Started
+البوابة الداخلية لفريق أكاديمية سترايك. للموظفين المصرّح لهم فقط.
 
-First, run the development server:
+**الوحدة الأولى: مركز التسويق** — الأهداف، خطة التسويق، العصف الذهني، تقويم المحتوى، سير العمل (Kanban)، ومتابعة الأرقام. كل تغيير يظهر للكل باللحظة (Supabase Realtime + Presence).
+
+## التقنيات
+
+- Next.js 16 (App Router) + TypeScript + Tailwind v4
+- Supabase (Auth + Postgres + Realtime) — مشروع `Strike Platform`
+- `@dnd-kit` للسحب والإفلات
+
+## التشغيل محلياً
 
 ```bash
+npm install
+cp .env.example .env.local   # ثم ضع مفتاح Supabase الـ publishable
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+المتغيرات المطلوبة:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| المتغير | الوصف |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | رابط مشروع Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | المفتاح العام (publishable / anon) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+لا يحتاج المشروع مفتاح service role: إدارة الحسابات تتم عبر دوال SQL محمية (المالك فقط).
 
-## Learn More
+## النشر على Vercel
 
-To learn more about Next.js, take a look at the following resources:
+1. Import الريبو في Vercel.
+2. أضف المتغيرين أعلاه في Environment Variables.
+3. Deploy. أضف رابط النشر في Supabase → Authentication → URL Configuration (Site URL).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## الحسابات والصلاحيات
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- تسجيل الدخول باسم مستخدم وكلمة مرور فقط (لا تسجيل ذاتي).
+- المالك ينشئ الحسابات من صفحة **الفريق** ويحدد الدور (مالك / مدير فرع / إداري / مدرب) وصلاحية **مركز التسويق**.
+- لا أحد يرى دور أو صلاحيات غيره؛ صفحة الفريق للمالك فقط.
+- تغيير كلمة المرور من **الإعدادات**.
 
-## Deploy on Vercel
+## قاعدة البيانات (Supabase)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+الجداول: `profiles`, `mk_goals`, `mk_plan_items`, `mk_ideas`, `mk_posts`, `mk_metrics`, `mk_activity`.
+كل جداول `mk_*` محمية بـ RLS: يقرأها ويعدلها فقط من لديه `marketing_access` (والمالك دائماً).
+سجل النشاط `mk_activity` يُملأ تلقائياً بـ triggers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+الدوال الإدارية (المالك فقط): `admin_create_user`, `admin_set_password`, `admin_delete_user`.
+
+## هيكل الكود
+
+```
+src/
+  proxy.ts                     # تجديد الجلسة + حماية الصفحات
+  lib/supabase/{client,server} # عملاء Supabase
+  lib/auth.ts                  # getProfile / canAccessMarketing
+  lib/types.ts                 # الأنواع والتسميات العربية
+  app/login                    # تسجيل الدخول
+  app/(portal)/                # الصفحات المحمية: الرئيسية، marketing، team، settings
+  components/shell.tsx         # القائمة الجانبية / السفلية
+  components/marketing/        # مركز التسويق: store (realtime) + التبويبات
+```
