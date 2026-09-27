@@ -55,12 +55,30 @@ html {
   color-scheme: light;
 }
 
+html {
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--silver-100);
   color: var(--ink);
   font-family: var(--font-tajawal), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* standalone (home-screen) mode on iOS: keep the status bar area navy */
+@media (display-mode: standalone) {
+  body {
+    background: var(--silver-100);
+  }
+}
+
+button,
+[role="button"] {
+  touch-action: manipulation;
 }
 
 /* numbers, English, dates → Barlow Condensed */
@@ -100,11 +118,26 @@ textarea {
 
 /* form controls */
 @utility field {
-  @apply w-full rounded-xl border border-silver-200 bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-2/60 outline-none transition focus:border-ice focus:ring-4 focus:ring-ice/15;
+  @apply w-full rounded-xl border border-silver-200 bg-white px-3.5 py-2.5 text-[16px] sm:text-[15px] text-ink placeholder:text-ink-2/60 outline-none transition focus:border-ice focus:ring-4 focus:ring-ice/15;
+  min-height: 44px;
 }
 
 @utility btn {
   @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[15px] font-bold transition select-none disabled:opacity-50 disabled:pointer-events-none;
+  min-height: 44px;
+}
+
+/* actions that appear on hover on desktop, but are always visible on touch screens */
+@utility reveal {
+  opacity: 1;
+  transition: opacity 0.15s;
+  @media (hover: hover) and (pointer: fine) {
+    opacity: 0;
+    .group:hover &,
+    .group:focus-within & {
+      opacity: 1;
+    }
+  }
 }
 .btn-primary {
   @apply btn bg-navy text-white hover:bg-navy-700 active:scale-[0.98];
@@ -134,6 +167,16 @@ textarea {
 /* brand philosophy line */
 .philosophy {
   letter-spacing: 0.02em;
+}
+
+/* horizontally scrolling tab strip: fade the far edge on narrow screens */
+.tabs-scroll {
+  scroll-padding-inline: 12px;
+}
+@media (max-width: 767px) {
+  .tabs-scroll {
+    mask-image: linear-gradient(to right, transparent 0, black 28px, black 100%);
+  }
 }
 
 /* drag preview */

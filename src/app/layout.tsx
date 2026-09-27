@@ -32,7 +32,15 @@ const bukra = localFont({
 export const metadata: Metadata = {
   title: { default: "STRIKE — بوابة الفريق", template: "%s · STRIKE" },
   description: "البوابة الداخلية لفريق أكاديمية سترايك",
-  icons: { icon: "/brand/strike-logo-navy.svg" },
+  applicationName: "STRIKE",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: { capable: true, title: "STRIKE", statusBarStyle: "black-translucent" },
+  formatDetection: { telephone: false },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {

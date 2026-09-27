@@ -2,8 +2,9 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, GripVertical, CalendarRange } from "lucide-react";
-import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { useDndSensors } from "./dnd";
+import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { useHub } from "./store";
@@ -27,11 +28,7 @@ export default function GoalsTab() {
   const goals = data.goals;
   const [editing, setEditing] = useState<Partial<Goal> | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useDndSensors();
 
   const summary = useMemo(() => {
     if (!goals.length) return null;
@@ -202,7 +199,7 @@ function GoalCard({ goal, onEdit, onDelete, onQuick }: { goal: Goal; onEdit: () 
         </button>
         <PlatformChip platform={goal.platform} full />
         <span className="text-ink-2 text-xs font-bold">{metricLabel(goal.metric)}</span>
-        <div className="ms-auto flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+        <div className="reveal ms-auto flex gap-0.5">
           <button onClick={onEdit} className="p-1.5 rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
             <Pencil size={15} />
           </button>

@@ -58,15 +58,15 @@ function HubInner() {
   return (
     <div className="px-4 sm:px-8 py-5 sm:py-8 max-w-[1400px]">
       {/* header */}
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-5">
-        <div>
-          <h1 className="display text-navy text-[32px] sm:text-[40px] leading-none">مركز التسويق</h1>
-          <p className="text-ink-2 mt-1.5 text-[15px]">خطة، أفكار، تقويم، ومتابعة — كل شي يتحدّث للكل باللحظة</p>
+      <div className="flex items-center sm:items-end justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
+        <div className="min-w-0">
+          <h1 className="display text-navy text-[26px] sm:text-[40px] leading-none">مركز التسويق</h1>
+          <p className="text-ink-2 mt-1.5 text-[15px] hidden sm:block">خطة، أفكار، تقويم، ومتابعة — كل شي يتحدّث للكل باللحظة</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full bg-white border border-silver-200 px-3 py-1.5">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 rounded-full bg-white border border-silver-200 px-2.5 sm:px-3 h-9" title={connected ? "متصل — التحديثات لحظية" : "جارٍ الاتصال…"}>
             <span className={clsx("h-2 w-2 rounded-full", connected ? "bg-ice live-dot" : "bg-silver")} />
-            <span className="text-xs font-bold text-navy">{connected ? "متصل" : "جارٍ الاتصال…"}</span>
+            <span className="text-xs font-bold text-navy hidden sm:inline">{connected ? "متصل" : "جارٍ الاتصال…"}</span>
             {others.length > 0 && (
               <div className="flex -space-x-1.5 space-x-reverse ms-1">
                 {others.slice(0, 5).map((p) => (
@@ -88,16 +88,19 @@ function HubInner() {
       </div>
 
       {/* tabs */}
-      <div className="sticky top-14 md:top-0 z-20 -mx-4 sm:mx-0 px-4 sm:px-0 bg-silver-100/85 backdrop-blur pt-1 pb-3">
-        <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white border border-silver-200 p-1 [scrollbar-width:none]">
+      <div className="sticky top-[calc(56px+env(safe-area-inset-top))] md:top-0 z-20 -mx-4 sm:mx-0 px-4 sm:px-0 bg-silver-100/85 backdrop-blur pt-1 pb-3">
+        <div className="flex gap-1 overflow-x-auto rounded-2xl bg-white border border-silver-200 p-1 [scrollbar-width:none] tabs-scroll">
           {TABS.map(({ id, label, icon: Icon }) => {
             const here = online.filter((p) => p.tab === id && p.id !== me.id);
             return (
               <button
                 key={id}
-                onClick={() => setTabState(id)}
+                onClick={(e) => {
+                  setTabState(id);
+                  e.currentTarget.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+                }}
                 className={clsx(
-                  "relative flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-[14px] font-bold transition",
+                  "relative flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 min-h-[42px] text-[14px] font-bold transition",
                   tab === id ? "bg-navy text-white shadow" : "text-navy hover:bg-navy-50",
                 )}
               >

@@ -2,7 +2,8 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, ChevronUp, CalendarPlus, Archive, StickyNote, Sparkles, Check } from "lucide-react";
-import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { useDndSensors } from "./dnd";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
@@ -22,7 +23,7 @@ export default function BrainstormTab({ onOpenCalendar }: { onOpenCalendar: () =
   const categories = useMemo(() => Array.from(new Set(data.ideas.map((i) => i.category).filter(Boolean))).sort((a, b) => a.localeCompare(b, "ar")), [data.ideas]);
   const ideas = useMemo(() => (filter ? data.ideas.filter((i) => i.category === filter) : data.ideas), [data.ideas, filter]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }));
+  const sensors = useDndSensors();
 
   async function addQuick(e: FormEvent) {
     e.preventDefault();
@@ -74,11 +75,11 @@ export default function BrainstormTab({ onOpenCalendar }: { onOpenCalendar: () =
             <button key={c.value} type="button" title={c.label} onClick={() => setQuickColor(c.value)} className={clsx("h-6 w-6 rounded-full border-2", c.cls, quickColor === c.value ? "border-navy" : "border-transparent")} />
           ))}
         </div>
-        <button className="btn-primary h-9 px-3">
-          <Plus size={16} /> أضف
+        <button className="btn-primary h-9 px-3" aria-label="أضف">
+          <Plus size={16} /> <span className="hidden sm:inline">أضف</span>
         </button>
-        <button type="button" className="btn-outline h-9 px-3 hidden sm:inline-flex" onClick={() => setEditing({ title: "", body: "", category: filter ?? "عام", color: "ice", platform: "general" })}>
-          <Pencil size={15} /> تفصيلية
+        <button type="button" className="btn-outline h-9 px-2.5 sm:px-3" title="فكرة تفصيلية" onClick={() => setEditing({ title: "", body: "", category: filter ?? "عام", color: "ice", platform: "general" })}>
+          <Pencil size={15} /> <span className="hidden sm:inline">تفصيلية</span>
         </button>
       </form>
 
@@ -199,7 +200,7 @@ function IdeaCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={clsx("group relative rounded-[14px] border p-4 flex flex-col gap-2 min-h-[132px]", noteColorClass(idea.color), isDragging && "dragging z-10")}
+      className={clsx("group relative rounded-[14px] border p-4 pb-3 flex flex-col gap-2 min-h-[132px]", noteColorClass(idea.color), isDragging && "dragging z-10")}
     >
       <div className="flex items-start gap-2">
         <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-navy/40 hover:text-navy touch-none -ms-1 mt-0.5" aria-label="اسحب">
@@ -220,25 +221,26 @@ function IdeaCard({
         )}
         <div className="ms-auto flex items-center gap-1">
           {authorName && <Avatar name={authorName} size={22} tone="white" />}
-          <button onClick={onVote} className="flex items-center gap-0.5 rounded-full bg-white/80 hover:bg-white px-2 py-0.5 text-navy font-bold text-xs" title="أعجبتني">
+          <button onClick={onVote} className="flex items-center gap-0.5 rounded-full bg-white/80 hover:bg-white px-2 h-7 text-navy font-bold text-xs" title="أعجبتني">
             <ChevronUp size={14} /> <span className="num">{idea.votes}</span>
           </button>
         </div>
       </div>
 
-      <div className="absolute top-2 end-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition bg-white/90 rounded-lg p-0.5 shadow-sm">
+      {/* actions: hover on desktop, always visible on touch */}
+      <div className="reveal flex items-center gap-0.5 -mb-1.5 -mx-1.5 pt-1 border-t border-navy/10">
         {!idea.is_note && !idea.moved_post_id && (
-          <button onClick={onToPost} className="p-1.5 rounded-md text-navy hover:bg-ice-100" title="حوّلها لمنشور في التقويم">
-            <CalendarPlus size={15} />
+          <button onClick={onToPost} className="h-8 px-2 rounded-md text-navy hover:bg-white/80 flex items-center gap-1 text-xs font-bold" title="حوّلها لمنشور في التقويم">
+            <CalendarPlus size={15} /> للتقويم
           </button>
         )}
-        <button onClick={onEdit} className="p-1.5 rounded-md text-navy hover:bg-navy-50" title="تعديل">
+        <button onClick={onEdit} className="h-8 w-8 rounded-md text-navy hover:bg-white/80 grid place-items-center" title="تعديل" aria-label="تعديل">
           <Pencil size={15} />
         </button>
-        <button onClick={onArchive} className="p-1.5 rounded-md text-navy hover:bg-silver-100" title="أرشفة">
+        <button onClick={onArchive} className="h-8 w-8 rounded-md text-navy hover:bg-white/80 grid place-items-center" title="أرشفة" aria-label="أرشفة">
           <Archive size={15} />
         </button>
-        <button onClick={onDelete} className="p-1.5 rounded-md text-navy hover:bg-error-100 hover:text-error" title="حذف">
+        <button onClick={onDelete} className="h-8 w-8 rounded-md text-navy hover:bg-error-100 hover:text-error grid place-items-center ms-auto" title="حذف" aria-label="حذف">
           <Trash2 size={15} />
         </button>
       </div>

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Plus, Clock, CalendarDays, CheckCheck } from "lucide-react";
-import { DndContext, DragOverlay, PointerSensor, TouchSensor, closestCorners, useDroppable, useSensor, useSensors, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, closestCorners, useDroppable, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
+import { useDndSensors } from "./dnd";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { format } from "date-fns";
@@ -28,7 +29,7 @@ export default function BoardTab() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hover, setHover] = useState<PostStatus | null>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
+  const sensors = useDndSensors();
 
   const colOf = (id: string): PostStatus | null => {
     if (id.startsWith("col-")) return id.slice(4) as PostStatus;
@@ -120,7 +121,7 @@ function Card({ post, onClick, overlay }: { post: Post; onClick?: () => void; ov
       style={overlay ? undefined : { transform: CSS.Transform.toString(transform), transition }}
       {...(overlay ? {} : { ...attributes, ...listeners })}
       onClick={onClick}
-      className={clsx("rounded-xl border border-silver-200 bg-white p-3 flex flex-col gap-2 cursor-grab active:cursor-grabbing touch-none hover:border-ice transition", isDragging && "opacity-30")}
+      className={clsx("rounded-xl border border-silver-200 bg-white p-3 flex flex-col gap-2 cursor-grab active:cursor-grabbing touch-manipulation select-none [-webkit-touch-callout:none] hover:border-ice transition", isDragging && "opacity-30")}
     >
       <div className="flex items-center gap-1.5">
         <PlatformChip platform={post.platform} />

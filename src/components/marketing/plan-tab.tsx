@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { Plus, Pencil, Trash2, GripVertical, Coins, CalendarRange } from "lucide-react";
-import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { useDndSensors } from "./dnd";
 import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
@@ -141,7 +142,7 @@ function Section({
   onDelete: (id: string) => void;
   onReorder: (next: PlanItem[]) => void;
 }) {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }));
+  const sensors = useDndSensors();
   function onDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
@@ -206,7 +207,7 @@ function PlanCard({ item, onEdit, onDelete }: { item: PlanItem; onEdit: () => vo
           </div>
         )}
       </div>
-      <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition">
+      <div className="reveal flex flex-col gap-0.5">
         <button onClick={onEdit} className="p-1.5 rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
           <Pencil size={14} />
         </button>

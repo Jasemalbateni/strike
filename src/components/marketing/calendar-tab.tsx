@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { ChevronRight, ChevronLeft, Plus, Inbox, Lightbulb, Clock } from "lucide-react";
-import { DndContext, DragOverlay, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import { useDndSensors } from "./dnd";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfMonth, startOfWeek } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
@@ -22,7 +23,7 @@ export default function CalendarTab() {
   const [active, setActive] = useState<{ kind: "post" | "idea"; item: Post | Idea } | null>(null);
   const [trayOpen, setTrayOpen] = useState(false);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }));
+  const sensors = useDndSensors();
 
   const days = useMemo(
     () => eachDayOfInterval({ start: startOfWeek(startOfMonth(month), { weekStartsOn: WEEK_START }), end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_START }) }),
@@ -131,7 +132,7 @@ export default function CalendarTab() {
             ))}
           </div>
           <div className="ms-auto flex gap-2">
-            <button className="btn-outline h-9 px-3 lg:hidden" onClick={() => setTrayOpen((o) => !o)}>
+            <button className="btn-outline h-9 px-3 xl:hidden" onClick={() => setTrayOpen((o) => !o)}>
               <Inbox size={16} /> <span className="num">{unscheduled.length}</span>
             </button>
             <button className="btn-primary h-9 px-3" onClick={() => setDraft({ status: "draft", platform: "instagram" })}>
@@ -140,9 +141,9 @@ export default function CalendarTab() {
           </div>
         </div>
 
-        {trayOpen && <div className="lg:hidden">{tray}</div>}
+        {trayOpen && <div className="xl:hidden">{tray}</div>}
 
-        <div className="grid lg:grid-cols-[1fr_280px] gap-4 items-start">
+        <div className="grid xl:grid-cols-[1fr_280px] gap-4 items-start">
           {/* month grid (md+) */}
           <div className="card overflow-hidden hidden md:block">
             <div className="grid grid-cols-7 bg-navy text-white text-xs font-bold">
@@ -181,7 +182,7 @@ export default function CalendarTab() {
               ))}
           </div>
 
-          <div className="hidden lg:block">{tray}</div>
+          <div className="hidden xl:block">{tray}</div>
         </div>
       </div>
 
@@ -202,15 +203,19 @@ function DayCell({ date, inMonth, posts, onOpen, onAdd }: { date: Date; inMonth:
   return (
     <div
       ref={setNodeRef}
+      onClick={(e) => {
+        // tapping the empty part of a day starts a new post on that day (handy on iPad)
+        if (e.target === e.currentTarget) onAdd();
+      }}
       className={clsx(
-        "group min-h-[112px] border-b border-e border-silver-200 p-1.5 flex flex-col gap-1 transition-colors",
+        "group min-h-[112px] border-b border-e border-silver-200 p-1.5 flex flex-col gap-1 transition-colors cursor-pointer",
         !inMonth && "bg-silver-100/60",
         isOver && "bg-ice-50 ring-2 ring-inset ring-ice",
       )}
     >
       <div className="flex items-center justify-between">
         <span className={clsx("num text-[13px] font-bold h-6 w-6 grid place-items-center rounded-full", today ? "bg-ice text-navy-900" : inMonth ? "text-navy" : "text-silver")}>{format(date, "d")}</span>
-        <button onClick={onAdd} className="opacity-0 group-hover:opacity-100 text-ink-2 hover:text-navy p-0.5 rounded" aria-label="منشور جديد في هذا اليوم">
+        <button onClick={onAdd} className="reveal hidden [@media(hover:hover)_and_(pointer:fine)]:grid text-ink-2 hover:text-navy h-7 w-7 -m-1 place-items-center rounded-md" aria-label="منشور جديد في هذا اليوم">
           <Plus size={14} />
         </button>
       </div>
@@ -232,14 +237,14 @@ function PostChip({ post, onClick, full }: { post: Post; onClick?: () => void; f
       {...listeners}
       onClick={onClick}
       className={clsx(
-        "w-full text-start rounded-lg border bg-white px-2 py-1.5 flex items-center gap-1.5 hover:border-ice transition touch-none",
+        "w-full text-start rounded-lg border bg-white px-2 py-1.5 flex items-start gap-1.5 hover:border-ice transition touch-manipulation select-none [-webkit-touch-callout:none]",
         post.status === "published" ? "border-navy/30" : post.status === "review" ? "border-gold" : "border-silver-200",
         isDragging && "opacity-30",
       )}
       title={`${post.title} · ${formatLabel(post.format)}${post.scheduled_time ? " · " + post.scheduled_time.slice(0, 5) : ""}${assignee ? " · " + assignee.full_name : ""}`}
     >
-      <PlatformChip platform={post.platform} className="px-1.5 text-[10px]" />
-      <span className={clsx("flex-1 truncate font-bold text-navy", full ? "text-[13.5px]" : "text-[12.5px]")}>{post.title}</span>
+      <PlatformChip platform={post.platform} className="px-1.5 text-[10px] mt-px" />
+      <span className={clsx("flex-1 font-bold text-navy leading-snug", full ? "text-[13.5px] truncate" : "text-[12.5px] line-clamp-2")}>{post.title}</span>
       {full && post.scheduled_time && (
         <span className="num text-[11px] text-ink-2 flex items-center gap-0.5 shrink-0">
           <Clock size={10} /> {post.scheduled_time.slice(0, 5)}
@@ -254,7 +259,7 @@ function PostChip({ post, onClick, full }: { post: Post; onClick?: () => void; f
 function IdeaChip({ idea, overlay }: { idea: Idea; overlay?: boolean }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `idea-${idea.id}` });
   return (
-    <div ref={overlay ? undefined : setNodeRef} {...(overlay ? {} : { ...attributes, ...listeners })} className={clsx("rounded-lg border border-gold-100 bg-gold-100/60 px-2.5 py-1.5 text-[13px] font-bold text-navy-900 cursor-grab active:cursor-grabbing touch-none flex items-center gap-1.5", isDragging && "opacity-30")}>
+    <div ref={overlay ? undefined : setNodeRef} {...(overlay ? {} : { ...attributes, ...listeners })} className={clsx("rounded-lg border border-gold-100 bg-gold-100/60 px-2.5 py-1.5 text-[13px] font-bold text-navy-900 cursor-grab active:cursor-grabbing touch-manipulation select-none [-webkit-touch-callout:none] flex items-center gap-1.5", isDragging && "opacity-30")}>
       <Lightbulb size={13} className="text-gold shrink-0" />
       <span className="truncate">{idea.title}</span>
     </div>
