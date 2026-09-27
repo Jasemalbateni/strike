@@ -2,22 +2,24 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Megaphone, Settings, Users, LogOut, type LucideIcon } from "lucide-react";
+import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
 
-type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavItem = { href: string; label: string; short?: string; icon: LucideIcon; phone?: boolean };
 
 export default function Shell({
   profile,
   showMarketing,
   isOwner,
+  canManagePlayers,
   children,
 }: {
   profile: { full_name: string; username: string };
   showMarketing: boolean;
   isOwner: boolean;
+  canManagePlayers: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -25,10 +27,14 @@ export default function Shell({
 
   const nav: NavItem[] = [
     { href: "/", label: "الرئيسية", icon: Home },
-    ...(showMarketing ? [{ href: "/marketing", label: "مركز التسويق", icon: Megaphone }] : []),
+    { href: "/attendance", label: "الحضور", icon: ClipboardCheck },
+    ...(canManagePlayers ? [{ href: "/players", label: "اللاعبين", icon: IdCard }] : []),
+    ...(showMarketing ? [{ href: "/marketing", label: "مركز التسويق", short: "التسويق", icon: Megaphone }] : []),
     ...(isOwner ? [{ href: "/team", label: "الفريق", icon: Users }] : []),
-    { href: "/settings", label: "الإعدادات", icon: Settings },
+    // settings live behind the gear in the phone header (keeps the bottom bar to 5 items)
+    { href: "/settings", label: "الإعدادات", icon: Settings, phone: false },
   ];
+  const phoneNav = nav.filter((n) => n.phone !== false);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -98,26 +104,31 @@ export default function Shell({
             <img src="/brand/strike-logo-light.svg" alt="STRIKE" className="h-8 w-auto" />
             <span className="en font-bold tracking-[0.12em]">STRIKE</span>
           </div>
-          <button onClick={signOut} className="text-silver h-11 w-11 -me-3 grid place-items-center" aria-label="تسجيل الخروج">
-            <LogOut size={20} />
-          </button>
+          <div className="flex items-center -me-3">
+            <Link href="/settings" className={clsx("h-11 w-11 grid place-items-center", isActive("/settings") ? "text-ice" : "text-silver")} aria-label="الإعدادات">
+              <Settings size={20} />
+            </Link>
+            <button onClick={signOut} className="text-silver h-11 w-11 grid place-items-center" aria-label="تسجيل الخروج">
+              <LogOut size={20} />
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-8">{children}</main>
 
         {/* phone bottom nav */}
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-silver-200 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5 flex">
-          {nav.map(({ href, label, icon: Icon }) => (
+          {phoneNav.map(({ href, label, short, icon: Icon }) => (
             <Link
               key={href}
               href={href}
               className={clsx(
-                "flex-1 flex flex-col items-center gap-0.5 rounded-xl py-1.5 min-h-[52px] justify-center text-[11px] font-bold",
+                "flex-1 min-w-0 flex flex-col items-center gap-0.5 rounded-xl py-1.5 min-h-[52px] justify-center text-[11px] font-bold",
                 isActive(href) ? "text-navy" : "text-ink-2",
               )}
             >
               <Icon size={22} className={isActive(href) ? "text-ice" : ""} />
-              {label}
+              <span className="truncate max-w-full">{short ?? label}</span>
             </Link>
           ))}
         </nav>

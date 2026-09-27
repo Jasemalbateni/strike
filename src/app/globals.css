@@ -123,8 +123,9 @@ textarea {
 }
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[15px] font-bold transition select-none disabled:opacity-50 disabled:pointer-events-none;
-  min-height: 44px;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-bold transition select-none disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
+  /* 44px touch target by default; an explicit h-* on the element wins (components layer) */
+  height: 44px;
 }
 
 /* actions that appear on hover on desktop, but are always visible on touch screens */
@@ -139,23 +140,26 @@ textarea {
     }
   }
 }
-.btn-primary {
-  @apply btn bg-navy text-white hover:bg-navy-700 active:scale-[0.98];
-}
-.btn-accent {
-  @apply btn bg-ice text-navy-900 hover:bg-ice-600 hover:text-white active:scale-[0.98];
-}
-.btn-ghost {
-  @apply btn text-navy hover:bg-navy-50;
-}
-.btn-outline {
-  @apply btn border border-silver-200 bg-white text-navy hover:border-ice hover:bg-ice-50;
-}
-.btn-danger {
-  @apply btn bg-error-100 text-error hover:bg-error hover:text-white;
-}
-.btn-danger-solid {
-  @apply btn bg-error text-white hover:bg-error/90 active:scale-[0.98];
+/* button variants live in the components layer so size utilities (h-8, w-8, px-0…) can override them */
+@layer components {
+  .btn-primary {
+    @apply btn bg-navy text-white hover:bg-navy-700 active:scale-[0.98];
+  }
+  .btn-accent {
+    @apply btn bg-ice text-navy-900 hover:bg-ice-600 hover:text-white active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply btn text-navy hover:bg-navy-50;
+  }
+  .btn-outline {
+    @apply btn border border-silver-200 bg-white text-navy hover:border-ice hover:bg-ice-50;
+  }
+  .btn-danger {
+    @apply btn bg-error-100 text-error hover:bg-error hover:text-white;
+  }
+  .btn-danger-solid {
+    @apply btn bg-error text-white hover:bg-error/90 active:scale-[0.98];
+  }
 }
 
 @utility card {

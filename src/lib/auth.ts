@@ -19,3 +19,13 @@ export const getProfile = cache(async (): Promise<Profile> => {
 export function canAccessMarketing(p: Profile) {
   return p.is_active && (p.role === "owner" || p.marketing_access);
 }
+
+/** players register, subscriptions, guardian data — mirrors SQL can_manage_players() */
+export function canManagePlayers(p: Profile) {
+  return p.is_active && ["owner", "branch_manager", "admin"].includes(p.role);
+}
+
+/** today's date in Kuwait as yyyy-MM-dd (the server runs in UTC) */
+export function todayKW() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}

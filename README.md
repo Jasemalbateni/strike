@@ -48,16 +48,27 @@ npm run dev
 
 الدوال الإدارية (المالك فقط): `admin_create_user`, `admin_set_password`, `admin_delete_user`.
 
+### اللاعبين والحضور
+
+الجداول: `branches` (الفروع وأيام التدريب وإيجار الملعب)، `groups` (الفئات)، `players`، `subscriptions`، `sessions` (حصة لكل فرع/تاريخ)، `attendance`.
+
+- **الحضور** (`/attendance`) لكل الموظفين: يفتح الحصة تلقائياً مع أول علامة، ضغطة على الاسم = حاضر / غائب، أزرار صغيرة لـ «متأخر» و«غياب بعذر»، زر «تجربة» يضيف لاعب تجربة ويحضّره فوراً (يظهر باللون الذهبي).
+- **اللاعبين** (`/players`) للمالك ومدير الفرع والإداري فقط (`can_manage_players()`): بيانات ولي الأمر، الاشتراكات، تنبيهات «منتهي» و«ينتهي خلال ٧ أيام»، قمع التجارب (سجّلوا ← حضروا ← اشتركوا) وتكلفة التسويق لكل مشترك جديد (إنفاق `mk_metrics.spend` ÷ التجارب المحوّلة).
+- المدربون لا يرون الاشتراكات ولا بيانات ولي الأمر (RLS + حذف الحقول في الخادم).
+- نهاية الاشتراك تُحسب من عدد الحصص وأيام تدريب الفرع (`nth_session_date` في SQL و`nthSessionDate` في `lib/players.ts`).
+- إحصاءات: view `player_attendance_stats` (حضور/غياب لكل لاعب) ودالة `period_stats(from, to)` (حصص، حضور، إيجار الملعب، إيراد الاشتراكات، إنفاق التسويق).
+
 ## هيكل الكود
 
 ```
 src/
   proxy.ts                     # تجديد الجلسة + حماية الصفحات
   lib/supabase/{client,server} # عملاء Supabase
-  lib/auth.ts                  # getProfile / canAccessMarketing
+  lib/auth.ts                  # getProfile / canAccessMarketing / canManagePlayers
   lib/types.ts                 # الأنواع والتسميات العربية
+  lib/players.ts               # أنواع اللاعبين + حساب نهاية الاشتراك وحالته
   app/login                    # تسجيل الدخول
-  app/(portal)/                # الصفحات المحمية: الرئيسية، marketing، team، settings
+  app/(portal)/                # الصفحات المحمية: الرئيسية، marketing، attendance، players، team، settings
   components/shell.tsx         # القائمة الجانبية / السفلية
   components/marketing/        # مركز التسويق: store (realtime) + التبويبات
 ```
