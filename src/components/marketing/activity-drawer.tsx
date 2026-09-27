@@ -8,8 +8,8 @@ import { ar } from "date-fns/locale";
 import { useHub } from "./store";
 import { Avatar } from "@/components/ui";
 
-const ACTION: Record<string, string> = { created: "أضاف", updated: "عدّل", deleted: "حذف", moved: "نقل", archived: "أرشف" };
-const ENTITY: Record<string, string> = { goal: "هدف", plan: "عنصر خطة", idea: "فكرة", post: "منشور", metric: "أرقام" };
+const ACTION: Record<string, string> = { created: "أضاف", updated: "عدّل", deleted: "حذف", moved: "نقل", archived: "أرشف", commented: "علّق على" };
+const ENTITY: Record<string, string> = { goal: "هدف", plan: "عنصر خطة", idea: "فكرة", post: "منشور", metric: "أرقام", note: "ملاحظة" };
 
 export default function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data } = useHub();

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import type { Activity, Comment, Goal, Idea, MetricRow, PlanItem, Post, StaffName } from "@/lib/types";
+import type { Activity, Comment, Goal, Idea, MetricRow, Note, PlanItem, Post, StaffName } from "@/lib/types";
 
 export type HubData = {
   goals: Goal[];
@@ -13,10 +13,11 @@ export type HubData = {
   metrics: MetricRow[];
   activity: Activity[];
   comments: Comment[];
+  notes: Note[];
   staff: StaffName[];
 };
 
-type TableKey = "mk_goals" | "mk_plan_items" | "mk_ideas" | "mk_posts" | "mk_metrics" | "mk_activity" | "mk_comments";
+type TableKey = "mk_goals" | "mk_plan_items" | "mk_ideas" | "mk_posts" | "mk_metrics" | "mk_activity" | "mk_comments" | "mk_notes";
 const TABLE_TO_KEY: Record<TableKey, keyof HubData> = {
   mk_goals: "goals",
   mk_plan_items: "plan",
@@ -25,6 +26,7 @@ const TABLE_TO_KEY: Record<TableKey, keyof HubData> = {
   mk_metrics: "metrics",
   mk_activity: "activity",
   mk_comments: "comments",
+  mk_notes: "notes",
 };
 const KEY_TO_TABLE = Object.fromEntries(Object.entries(TABLE_TO_KEY).map(([t, k]) => [k, t])) as Record<
   keyof HubData,
@@ -43,6 +45,8 @@ function sortRows(key: keyof HubData, rows: Row[]) {
   const byCreatedAsc = (a: Row, b: Row) => String(a.created_at).localeCompare(String(b.created_at));
   if (key === "activity") return r.sort((a, b) => -byCreatedAsc(a, b)).slice(0, 60);
   if (key === "comments") return r.sort(byCreatedAsc);
+  if (key === "notes")
+    return r.sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(a.done) - Number(b.done) || String(b.updated_at).localeCompare(String(a.updated_at)));
   if (key === "metrics") return r.sort((a, b) => String(b.week_start).localeCompare(String(a.week_start)));
   if (key === "staff") return r.sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), "ar"));
   if (key === "ideas") return r.sort((a, b) => Number(a.position) - Number(b.position) || -byCreatedAsc(a, b));
@@ -51,7 +55,7 @@ function sortRows(key: keyof HubData, rows: Row[]) {
 
 /** rows that should not be in the live list at all */
 function hidden(key: keyof HubData, row: Row) {
-  return key === "ideas" && row.archived === true;
+  return (key === "ideas" || key === "notes") && row.archived === true;
 }
 
 function reducer(state: HubData, action: Action): HubData {
@@ -139,7 +143,7 @@ export function HubProvider({
         return;
       }
       let q = supabase.from(KEY_TO_TABLE[key]).select("*");
-      if (key === "ideas") q = q.eq("archived", false);
+      if (key === "ideas" || key === "notes") q = q.eq("archived", false);
       if (key === "activity") q = q.order("created_at", { ascending: false }).limit(40);
       if (key === "comments") q = q.order("created_at", { ascending: false }).limit(1000);
       if (key === "metrics") q = q.order("week_start", { ascending: false }).limit(400);

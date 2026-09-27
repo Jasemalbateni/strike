@@ -201,6 +201,23 @@ export type MetricRow = {
   updated_at: string;
 };
 
+export type Note = {
+  id: string;
+  title: string;
+  body: string;
+  category: string;
+  color: string;
+  pinned: boolean;
+  done: boolean;
+  archived: boolean;
+  position: number;
+  created_by: string | null;
+  updated_by: string | null;
+  updated_by_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Comment = {
   id: string;
   post_id: string;

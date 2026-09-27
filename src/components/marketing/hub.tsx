@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Target, Map, Lightbulb, CalendarDays, KanbanSquare, LineChart, History, AtSign } from "lucide-react";
+import { Target, Map, Lightbulb, CalendarDays, KanbanSquare, LineChart, History, AtSign, StickyNote } from "lucide-react";
 import clsx from "clsx";
 import { HubProvider, useHub, type HubData, type Me } from "./store";
 import GoalsTab from "./goals-tab";
@@ -10,6 +10,7 @@ import BrainstormTab from "./brainstorm-tab";
 import CalendarTab from "./calendar-tab";
 import BoardTab from "./board-tab";
 import MetricsTab from "./metrics-tab";
+import NotesTab from "./notes-tab";
 import ActivityDrawer from "./activity-drawer";
 import MentionsDrawer, { useMyMentions } from "./mentions-drawer";
 import PostModal, { type PostDraft } from "./post-modal";
@@ -22,6 +23,7 @@ const TABS = [
   { id: "calendar", label: "التقويم", icon: CalendarDays },
   { id: "board", label: "سير العمل", icon: KanbanSquare },
   { id: "metrics", label: "المتابعة", icon: LineChart },
+  { id: "notes", label: "الملاحظات", icon: StickyNote },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -136,6 +138,7 @@ function HubInner() {
         {tab === "calendar" && <CalendarTab />}
         {tab === "board" && <BoardTab />}
         {tab === "metrics" && <MetricsTab />}
+        {tab === "notes" && <NotesTab />}
       </div>
 
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />
