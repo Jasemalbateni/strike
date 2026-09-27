@@ -28,7 +28,10 @@ export default function LoginForm() {
     });
     if (error) {
       setLoading(false);
-      setError("اسم المستخدم أو كلمة المرور غير صحيحة.");
+      const msg = (error.message || "").toLowerCase();
+      // only a real 400 from Auth means wrong credentials; anything else is a connection/config problem
+      const badCreds = error.status === 400 && (msg.includes("invalid login credentials") || msg.includes("invalid_credentials"));
+      setError(badCreds ? "اسم المستخدم أو كلمة المرور غير صحيحة." : "تعذر الوصول لخادم تسجيل الدخول — تحقق من الاتصال أو من إعدادات النشر (رابط Supabase).");
       return;
     }
     const next = params.get("next");
