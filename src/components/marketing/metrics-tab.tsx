@@ -6,6 +6,8 @@ import { format, parseISO, startOfWeek } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { useHub } from "./store";
+import { useConfirm } from "@/components/confirm";
+
 import { Field, PlatformSelect, PlatformChip, fmtNum, EmptyState } from "@/components/ui";
 import { PLATFORMS, platformLabel, metricLabel, type MetricRow, type Platform } from "@/lib/types";
 
@@ -26,6 +28,7 @@ const snapToWeek = (d: string) => format(startOfWeek(parseISO(d), { weekStartsOn
 
 export default function MetricsTab() {
   const { data, upsert, remove } = useHub();
+  const confirm = useConfirm();
   const [platform, setPlatform] = useState<Platform>("instagram");
   const [week, setWeek] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: WEEK_START }), "yyyy-MM-dd"));
   // the form shows the live row for (platform, week) until the user starts typing; edits live in `edits`
@@ -231,7 +234,7 @@ export default function MetricsTab() {
                     </td>
                   ))}
                   <td className="px-2 py-2 text-end">
-                    <button onClick={() => confirm("حذف هذا الأسبوع؟") && remove("metrics", m.id)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+                    <button onClick={async () => (await confirm({ title: "حذف أرقام هذا الأسبوع؟", message: `${platformLabel(m.platform)} — أسبوع ${m.week_start}` })) && remove("metrics", m.id)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
                       <Trash2 size={15} />
                     </button>
                   </td>

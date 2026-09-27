@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Home, Megaphone, Settings, Users, LogOut, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
+import { ConfirmProvider } from "@/components/confirm";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -40,6 +41,7 @@ export default function Shell({
   const initials = profile.full_name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("");
 
   return (
+    <ConfirmProvider>
     <div className="min-h-dvh flex">
       {/* sidebar: icon rail on tablets incl. iPad landscape (md), full on laptops (xl+) */}
       <aside className="hidden md:flex md:w-[76px] xl:w-[248px] shrink-0 flex-col bg-navy text-white sticky top-0 h-dvh transition-[width]">
@@ -121,5 +123,6 @@ export default function Shell({
         </nav>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }

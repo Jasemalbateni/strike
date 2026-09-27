@@ -154,6 +154,9 @@ textarea {
 .btn-danger {
   @apply btn bg-error-100 text-error hover:bg-error hover:text-white;
 }
+.btn-danger-solid {
+  @apply btn bg-error text-white hover:bg-error/90 active:scale-[0.98];
+}
 
 @utility card {
   @apply rounded-[14px] bg-white border border-silver-200/80;

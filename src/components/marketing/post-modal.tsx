@@ -3,6 +3,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Trash2, CheckCircle2, Undo2, ExternalLink } from "lucide-react";
 import { useHub } from "./store";
+import { useConfirm } from "@/components/confirm";
+import Comments from "./comments";
+
 import { Field, Modal, PlatformSelect } from "@/components/ui";
 import { FORMATS, STATUSES, type Platform, type Post, type PostFormat, type PostStatus } from "@/lib/types";
 
@@ -37,6 +40,7 @@ function normalize(p: PostDraft): Values {
 
 function PostForm({ draft, onClose }: { draft: PostDraft; onClose: (saved?: Post | null) => void }) {
   const { data, insert, update, remove, me, refresh } = useHub();
+  const confirm = useConfirm();
   const [p, setP] = useState<PostDraft>(draft);
   const [busy, setBusy] = useState(false);
 
@@ -83,7 +87,8 @@ function PostForm({ draft, onClose }: { draft: PostDraft; onClose: (saved?: Post
   }
 
   async function del() {
-    if (!p.id || !confirm("حذف المنشور نهائياً؟")) return;
+    if (!p.id) return;
+    if (!(await confirm({ title: "حذف المنشور نهائياً؟", message: `«${p.title}» وكل تعليقاته بتنحذف.` }))) return;
     const ok = await remove("posts", p.id);
     if (ok) onClose(null);
   }
@@ -173,6 +178,7 @@ function PostForm({ draft, onClose }: { draft: PostDraft; onClose: (saved?: Post
       <Field label="ملاحظات داخلية" className="sm:col-span-3">
         <textarea className="field min-h-16" value={p.notes ?? ""} onChange={(e) => setP({ ...p, notes: e.target.value })} />
       </Field>
+      {p.id && <Comments postId={p.id} />}
       <div className="sm:col-span-3 flex items-center justify-between gap-3 pt-2 border-t border-silver-200">
         <div>
           {p.id && (

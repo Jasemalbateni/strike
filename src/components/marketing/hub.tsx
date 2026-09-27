@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Target, Map, Lightbulb, CalendarDays, KanbanSquare, LineChart, History } from "lucide-react";
+import { Target, Map, Lightbulb, CalendarDays, KanbanSquare, LineChart, History, AtSign } from "lucide-react";
 import clsx from "clsx";
-import { HubProvider, useHub, type HubData } from "./store";
+import { HubProvider, useHub, type HubData, type Me } from "./store";
 import GoalsTab from "./goals-tab";
 import PlanTab from "./plan-tab";
 import BrainstormTab from "./brainstorm-tab";
@@ -11,6 +11,8 @@ import CalendarTab from "./calendar-tab";
 import BoardTab from "./board-tab";
 import MetricsTab from "./metrics-tab";
 import ActivityDrawer from "./activity-drawer";
+import MentionsDrawer, { useMyMentions } from "./mentions-drawer";
+import PostModal, { type PostDraft } from "./post-modal";
 import { Avatar } from "@/components/ui";
 
 const TABS = [
@@ -23,7 +25,7 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export default function MarketingHub({ initial, me }: { initial: HubData; me: { id: string; name: string; isOwner: boolean } }) {
+export default function MarketingHub({ initial, me }: { initial: HubData; me: Me }) {
   return (
     <HubProvider initial={initial} me={me}>
       <HubInner />
@@ -47,6 +49,11 @@ function HubInner() {
   const tab: TabId = TABS.some((t) => `#${t.id}` === hash) ? (hash.slice(1) as TabId) : "goals";
   const setTabState = (id: TabId) => navigateHash(id);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [mentionsOpen, setMentionsOpen] = useState(false);
+  const [seenAt, setSeenAt] = useState(me.mentionsSeenAt);
+  const [openPost, setOpenPost] = useState<PostDraft | null>(null);
+  const mentions = useMyMentions();
+  const unseen = mentions.filter((c) => c.created_at > seenAt).length;
 
   useEffect(() => {
     setTab(tab);
@@ -76,11 +83,11 @@ function HubInner() {
               </div>
             )}
           </div>
-          <button
-            onClick={() => setActivityOpen(true)}
-            className="btn-outline h-9 px-3 text-sm"
-            title="سجل النشاط"
-          >
+          <button onClick={() => setMentionsOpen(true)} className={clsx("btn-outline h-9 px-3 text-sm relative", unseen > 0 && "border-ice")} title="الإشارات لك">
+            <AtSign size={16} className={unseen > 0 ? "text-ice-600" : undefined} />
+            {unseen > 0 && <span className="num absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-gold text-navy-900 text-[11px] font-bold grid place-items-center">{unseen}</span>}
+          </button>
+          <button onClick={() => setActivityOpen(true)} className="btn-outline h-9 px-3 text-sm" title="سجل النشاط">
             <History size={16} />
             <span className="hidden sm:inline">النشاط</span>
           </button>
@@ -132,6 +139,8 @@ function HubInner() {
       </div>
 
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />
+      <MentionsDrawer open={mentionsOpen} onClose={() => setMentionsOpen(false)} seenAt={seenAt} onSeen={setSeenAt} onOpenPost={(p) => setOpenPost(p)} />
+      <PostModal draft={openPost} onClose={() => setOpenPost(null)} />
 
       {/* toasts */}
       <div aria-live="polite" className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] flex flex-col gap-2 items-center md:items-end pointer-events-none">

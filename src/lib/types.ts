@@ -20,6 +20,7 @@ export type Profile = {
   role: StaffRole;
   marketing_access: boolean;
   is_active: boolean;
+  mentions_seen_at?: string;
   created_at: string;
   updated_at: string;
 };
@@ -198,6 +199,16 @@ export type MetricRow = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type Comment = {
+  id: string;
+  post_id: string;
+  author_id: string | null;
+  author_name: string;
+  body: string;
+  mentions: string[];
+  created_at: string;
 };
 
 export type Activity = {

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import type { Activity, Goal, Idea, MetricRow, PlanItem, Post, StaffName } from "@/lib/types";
+import type { Activity, Comment, Goal, Idea, MetricRow, PlanItem, Post, StaffName } from "@/lib/types";
 
 export type HubData = {
   goals: Goal[];
@@ -12,10 +12,11 @@ export type HubData = {
   posts: Post[];
   metrics: MetricRow[];
   activity: Activity[];
+  comments: Comment[];
   staff: StaffName[];
 };
 
-type TableKey = "mk_goals" | "mk_plan_items" | "mk_ideas" | "mk_posts" | "mk_metrics" | "mk_activity";
+type TableKey = "mk_goals" | "mk_plan_items" | "mk_ideas" | "mk_posts" | "mk_metrics" | "mk_activity" | "mk_comments";
 const TABLE_TO_KEY: Record<TableKey, keyof HubData> = {
   mk_goals: "goals",
   mk_plan_items: "plan",
@@ -23,6 +24,7 @@ const TABLE_TO_KEY: Record<TableKey, keyof HubData> = {
   mk_posts: "posts",
   mk_metrics: "metrics",
   mk_activity: "activity",
+  mk_comments: "comments",
 };
 const KEY_TO_TABLE = Object.fromEntries(Object.entries(TABLE_TO_KEY).map(([t, k]) => [k, t])) as Record<
   keyof HubData,
@@ -40,6 +42,7 @@ function sortRows(key: keyof HubData, rows: Row[]) {
   const r = [...rows];
   const byCreatedAsc = (a: Row, b: Row) => String(a.created_at).localeCompare(String(b.created_at));
   if (key === "activity") return r.sort((a, b) => -byCreatedAsc(a, b)).slice(0, 60);
+  if (key === "comments") return r.sort(byCreatedAsc);
   if (key === "metrics") return r.sort((a, b) => String(b.week_start).localeCompare(String(a.week_start)));
   if (key === "staff") return r.sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), "ar"));
   if (key === "ideas") return r.sort((a, b) => Number(a.position) - Number(b.position) || -byCreatedAsc(a, b));
@@ -73,11 +76,12 @@ function reducer(state: HubData, action: Action): HubData {
 }
 
 export type Presence = { id: string; name: string; tab: string; online_at: string };
+export type Me = { id: string; name: string; isOwner: boolean; mentionsSeenAt: string };
 export type Toast = { id: number; text: string; kind: "error" | "info" };
 
 type Ctx = {
   data: HubData;
-  me: { id: string; name: string; isOwner: boolean };
+  me: Me;
   online: Presence[];
   connected: boolean;
   toasts: Toast[];
@@ -109,7 +113,7 @@ export function HubProvider({
   children,
 }: {
   initial: HubData;
-  me: { id: string; name: string; isOwner: boolean };
+  me: Me;
   children: React.ReactNode;
 }) {
   const supabase = useMemo(() => createClient(), []);
@@ -137,6 +141,7 @@ export function HubProvider({
       let q = supabase.from(KEY_TO_TABLE[key]).select("*");
       if (key === "ideas") q = q.eq("archived", false);
       if (key === "activity") q = q.order("created_at", { ascending: false }).limit(40);
+      if (key === "comments") q = q.order("created_at", { ascending: false }).limit(1000);
       if (key === "metrics") q = q.order("week_start", { ascending: false }).limit(400);
       const { data: rows } = await q;
       if (rows) dispatch({ type: "replace", key, rows: rows as Row[] });

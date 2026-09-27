@@ -8,6 +8,8 @@ import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@d
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { useHub } from "./store";
+import { useConfirm } from "@/components/confirm";
+
 import PostModal, { type PostDraft } from "./post-modal";
 import { EmptyState, Field, Modal, PlatformChip, PlatformSelect, Avatar } from "@/components/ui";
 import { NOTE_COLORS, noteColorClass, type Idea, type NoteColor, type Platform } from "@/lib/types";
@@ -15,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function BrainstormTab({ onOpenCalendar }: { onOpenCalendar: () => void }) {
   const { data, insert, update, remove, rpc, me, notify } = useHub();
+  const confirm = useConfirm();
   const [quick, setQuick] = useState("");
   const [quickColor, setQuickColor] = useState<NoteColor>("ice");
   const [filter, setFilter] = useState<string | null>(null);
@@ -183,7 +186,7 @@ export default function BrainstormTab({ onOpenCalendar }: { onOpenCalendar: () =
                   onVote={() => vote(idea)}
                   onEdit={() => setEditing(idea)}
                   onArchive={() => update("ideas", idea.id, { archived: true })}
-                  onDelete={() => confirm("حذف الفكرة نهائياً؟") && remove("ideas", idea.id)}
+                  onDelete={async () => (await confirm({ title: "حذف الفكرة نهائياً؟", message: "إذا تبي ترجع لها لاحقاً استخدم الأرشفة بدل الحذف." })) && remove("ideas", idea.id)}
                   onToPost={() => toPost(idea)}
                   onOpenCalendar={onOpenCalendar}
                 />

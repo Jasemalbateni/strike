@@ -8,11 +8,14 @@ import { SortableContext, arrayMove, verticalListSortingStrategy, useSortable } 
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { useHub } from "./store";
+import { useConfirm } from "@/components/confirm";
+
 import { Field, Modal, PlatformChip, PlatformSelect, fmtNum } from "@/components/ui";
 import { PLAN_KINDS, type PlanItem, type PlanKind, type Platform } from "@/lib/types";
 
 export default function PlanTab() {
   const { data, insert, update, remove } = useHub();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState<Partial<PlanItem> | null>(null);
   const totalBudget = data.plan.filter((p) => p.kind === "budget").reduce((s, p) => s + (Number(p.budget_amount) || 0), 0);
   const campaignBudget = data.plan.filter((p) => p.kind === "campaign").reduce((s, p) => s + (Number(p.budget_amount) || 0), 0);
@@ -62,7 +65,10 @@ export default function PlanTab() {
             items={data.plan.filter((p) => p.kind === k.value)}
             onAdd={() => setEditing({ kind: k.value, platform: "general", title: "", body: "" })}
             onEdit={(it) => setEditing(it)}
-            onDelete={(id) => remove("plan", id)}
+            onDelete={async (id) => {
+              const it = data.plan.find((p) => p.id === id);
+              if (await confirm({ title: "حذف من الخطة؟", message: it ? `«${it.title}» بينحذف نهائياً.` : undefined })) remove("plan", id);
+            }}
             onReorder={async (next) => {
               await Promise.all(next.map((p, i) => (p.position !== i ? update("plan", p.id, { position: i }) : null)));
             }}
@@ -172,7 +178,7 @@ function Section({
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <ul className="flex flex-col gap-2">
               {items.map((it) => (
-                <PlanCard key={it.id} item={it} onEdit={() => onEdit(it)} onDelete={() => confirm("حذف العنصر؟") && onDelete(it.id)} />
+                <PlanCard key={it.id} item={it} onEdit={() => onEdit(it)} onDelete={() => onDelete(it.id)} />
               ))}
             </ul>
           </SortableContext>

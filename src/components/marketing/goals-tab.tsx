@@ -8,6 +8,8 @@ import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@d
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { useHub } from "./store";
+import { useConfirm } from "@/components/confirm";
+
 import { EmptyState, Field, Modal, PlatformChip, PlatformSelect, fmtNum } from "@/components/ui";
 import { METRICS, metricLabel, type Goal, type Metric, type Platform } from "@/lib/types";
 
@@ -25,6 +27,7 @@ const blank = (): Partial<Goal> => ({
 
 export default function GoalsTab() {
   const { data, insert, update, remove } = useHub();
+  const confirm = useConfirm();
   const goals = data.goals;
   const [editing, setEditing] = useState<Partial<Goal> | null>(null);
 
@@ -99,7 +102,7 @@ export default function GoalsTab() {
           <SortableContext items={goals.map((g) => g.id)} strategy={rectSortingStrategy}>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {goals.map((g) => (
-                <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onDelete={() => remove("goals", g.id)} onQuick={(v) => update("goals", g.id, { current_value: v })} />
+                <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onDelete={async () => (await confirm({ title: "حذف الهدف؟", message: `«${g.title}» بينحذف نهائياً.` })) && remove("goals", g.id)} onQuick={(v) => update("goals", g.id, { current_value: v })} />
               ))}
             </div>
           </SortableContext>
@@ -203,7 +206,7 @@ function GoalCard({ goal, onEdit, onDelete, onQuick }: { goal: Goal; onEdit: () 
           <button onClick={onEdit} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
             <Pencil size={15} />
           </button>
-          <button onClick={() => confirm("حذف الهدف؟") && onDelete()} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+          <button onClick={onDelete} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
             <Trash2 size={15} />
           </button>
         </div>

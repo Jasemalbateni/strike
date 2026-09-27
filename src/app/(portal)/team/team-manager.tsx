@@ -5,6 +5,8 @@ import { Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X } from "l
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
+import { useConfirm } from "@/components/confirm";
+
 import { ROLE_LABELS, type Profile, type StaffRole } from "@/lib/types";
 
 const ROLES = Object.keys(ROLE_LABELS) as StaffRole[];
@@ -15,6 +17,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
   const [pwFor, setPwFor] = useState<Profile | null>(null);
   const [pwValue, setPwValue] = useState("");
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -95,7 +98,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
   }
 
   async function remove(p: Profile) {
-    if (!window.confirm(`حذف حساب ${p.full_name} نهائياً؟ ما يقدر يدخل بعدها.`)) return;
+    if (!(await confirm({ title: `حذف حساب ${p.full_name}؟`, message: "ما يقدر يدخل بعدها، وكل ما أنشأه يبقى باسمه.", confirmText: "حذف الحساب" }))) return;
     const { error } = await supabase.rpc("admin_delete_user", { p_user_id: p.id });
     showFlash(error ? "تعذر الحذف" : `تم حذف حساب ${p.full_name}`);
     reload();

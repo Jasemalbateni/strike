@@ -8,6 +8,9 @@ import {
   Inbox,
   Lightbulb,
   Clock,
+  CalendarDays,
+  CalendarRange,
+  MessageCircle,
 } from "lucide-react";
 import {
   DndContext,
@@ -30,6 +33,8 @@ import {
   parseISO,
   startOfMonth,
   startOfWeek,
+  addWeeks,
+  isWithinInterval,
 } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
@@ -69,7 +74,11 @@ function draftFromIdea(idea: Idea, date?: string): PostDraft {
 
 export default function CalendarTab() {
   const { data, update, insert } = useHub();
+  const [view, setView] = useState<"month" | "week">("month");
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
+  const [week, setWeek] = useState(() =>
+    startOfWeek(new Date(), { weekStartsOn: WEEK_START }),
+  );
   const [platformFilter, setPlatformFilter] = useState<Platform | null>(null);
   const [draft, setDraft] = useState<PostDraft | null>(null);
   const [active, setActive] = useState<{
@@ -85,12 +94,35 @@ export default function CalendarTab() {
 
   const days = useMemo(
     () =>
-      eachDayOfInterval({
-        start: startOfWeek(startOfMonth(month), { weekStartsOn: WEEK_START }),
-        end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_START }),
-      }),
-    [month],
+      view === "week"
+        ? eachDayOfInterval({
+            start: week,
+            end: endOfWeek(week, { weekStartsOn: WEEK_START }),
+          })
+        : eachDayOfInterval({
+            start: startOfWeek(startOfMonth(month), {
+              weekStartsOn: WEEK_START,
+            }),
+            end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_START }),
+          }),
+    [view, month, week],
   );
+  const inRange = (d: Date) => (view === "week" ? true : isSameMonth(d, month));
+  const weekEnd = endOfWeek(week, { weekStartsOn: WEEK_START });
+  const rangeLabel =
+    view === "week"
+      ? isSameMonth(week, weekEnd)
+        ? `${format(week, "d", { locale: ar })} – ${format(weekEnd, "d MMMM yyyy", { locale: ar })}`
+        : `${format(week, "d MMMM", { locale: ar })} – ${format(weekEnd, "d MMMM yyyy", { locale: ar })}`
+      : format(month, "LLLL yyyy", { locale: ar });
+  function go(dir: -1 | 1) {
+    if (view === "week") setWeek((w) => addWeeks(w, dir));
+    else setMonth((m) => addMonths(m, dir));
+  }
+  function goToday() {
+    setMonth(startOfMonth(new Date()));
+    setWeek(startOfWeek(new Date(), { weekStartsOn: WEEK_START }));
+  }
 
   const posts = useMemo(
     () =>
@@ -104,8 +136,13 @@ export default function CalendarTab() {
   const ideas = data.ideas.filter(
     (i) => !i.is_note && !i.moved_post_id && !i.archived,
   );
-  const monthCount = scheduled.filter((p) =>
-    isSameMonth(parseISO(p.scheduled_date!), month),
+  const rangeCount = scheduled.filter((p) =>
+    view === "week"
+      ? isWithinInterval(parseISO(p.scheduled_date!), {
+          start: week,
+          end: weekEnd,
+        })
+      : isSameMonth(parseISO(p.scheduled_date!), month),
   ).length;
 
   const byDay = (d: Date) =>
@@ -217,30 +254,70 @@ export default function CalendarTab() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="card flex items-center p-1">
             <button
-              onClick={() => setMonth((m) => addMonths(m, -1))}
+              onClick={() => go(-1)}
               className="h-10 w-10 grid place-items-center rounded-lg hover:bg-navy-50 text-navy"
-              aria-label="الشهر السابق"
+              aria-label={view === "week" ? "الأسبوع السابق" : "الشهر السابق"}
             >
               <ChevronRight size={18} />
             </button>
             <button
-              onClick={() => setMonth(startOfMonth(new Date()))}
-              className="px-3 h-10 font-extrabold text-navy min-w-36 text-center"
-              title="العودة لهذا الشهر"
+              onClick={goToday}
+              className="px-3 h-10 font-extrabold text-navy min-w-36 text-center whitespace-nowrap"
+              title="العودة لليوم"
             >
-              {format(month, "LLLL yyyy", { locale: ar })}
+              {rangeLabel}
             </button>
             <button
-              onClick={() => setMonth((m) => addMonths(m, 1))}
+              onClick={() => go(1)}
               className="h-10 w-10 grid place-items-center rounded-lg hover:bg-navy-50 text-navy"
-              aria-label="الشهر التالي"
+              aria-label={view === "week" ? "الأسبوع التالي" : "الشهر التالي"}
             >
               <ChevronLeft size={18} />
             </button>
           </div>
+          <div
+            className="card flex items-center p-1"
+            role="tablist"
+            aria-label="طريقة العرض"
+          >
+            <button
+              role="tab"
+              aria-selected={view === "month"}
+              onClick={() => setView("month")}
+              className={clsx(
+                "h-8 px-3 rounded-lg text-sm font-bold flex items-center gap-1.5",
+                view === "month"
+                  ? "bg-navy text-white"
+                  : "text-navy hover:bg-navy-50",
+              )}
+            >
+              <CalendarDays size={15} /> شهر
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === "week"}
+              onClick={() => {
+                setWeek(
+                  startOfWeek(
+                    isSameMonth(new Date(), month) ? new Date() : month,
+                    { weekStartsOn: WEEK_START },
+                  ),
+                );
+                setView("week");
+              }}
+              className={clsx(
+                "h-8 px-3 rounded-lg text-sm font-bold flex items-center gap-1.5",
+                view === "week"
+                  ? "bg-navy text-white"
+                  : "text-navy hover:bg-navy-50",
+              )}
+            >
+              <CalendarRange size={15} /> أسبوع
+            </button>
+          </div>
           <span className="text-ink-2 text-sm">
-            <span className="num font-bold text-navy">{monthCount}</span> منشور
-            هذا الشهر
+            <span className="num font-bold text-navy">{rangeCount}</span> منشور{" "}
+            {view === "week" ? "هذا الأسبوع" : "هذا الشهر"}
           </span>
           <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
             <button
@@ -312,7 +389,8 @@ export default function CalendarTab() {
                   <DayCell
                     key={d.toISOString()}
                     date={d}
-                    inMonth={isSameMonth(d, month)}
+                    inMonth={inRange(d)}
+                    tall={view === "week"}
                     posts={byDay(d)}
                     onOpen={(p) => setDraft(p)}
                     onAdd={() =>
@@ -328,14 +406,15 @@ export default function CalendarTab() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {days.filter((d) => isSameMonth(d, month) && byDay(d).length)
-                .length === 0 && (
+              {days.filter((d) => inRange(d) && byDay(d).length).length ===
+                0 && (
                 <div className="card p-6 text-center text-ink-2 text-sm">
-                  لا توجد منشورات مجدولة هذا الشهر
+                  لا توجد منشورات مجدولة{" "}
+                  {view === "week" ? "هذا الأسبوع" : "هذا الشهر"}
                 </div>
               )}
               {days
-                .filter((d) => isSameMonth(d, month) && byDay(d).length)
+                .filter((d) => inRange(d) && byDay(d).length)
                 .map((d) => (
                   <div key={d.toISOString()} className="card p-3">
                     <div
@@ -389,12 +468,14 @@ export default function CalendarTab() {
 function DayCell({
   date,
   inMonth,
+  tall = false,
   posts,
   onOpen,
   onAdd,
 }: {
   date: Date;
   inMonth: boolean;
+  tall?: boolean;
   posts: Post[];
   onOpen: (p: Post) => void;
   onAdd: () => void;
@@ -410,7 +491,8 @@ function DayCell({
         if (e.target === e.currentTarget) onAdd();
       }}
       className={clsx(
-        "group min-h-[112px] border-b border-e border-silver-200 p-1.5 flex flex-col gap-1 transition-colors cursor-pointer",
+        "group border-b border-e border-silver-200 p-1.5 flex flex-col gap-1 transition-colors cursor-pointer",
+        tall ? "min-h-[440px]" : "min-h-[112px]",
         !inMonth && "bg-silver-100/60",
         isOver && "bg-ice-50 ring-2 ring-inset ring-ice",
       )}
@@ -428,6 +510,11 @@ function DayCell({
         >
           {format(date, "d")}
         </span>
+        {tall && (
+          <span className="text-[11px] text-ink-2 font-bold me-auto ms-1.5">
+            {format(date, "MMM", { locale: ar })}
+          </span>
+        )}
         <button
           onClick={onAdd}
           className="reveal pointer-events-auto hidden [@media(hover:hover)_and_(pointer:fine)]:grid text-ink-2 hover:text-navy h-7 w-7 -m-1 place-items-center rounded-md"
@@ -437,7 +524,13 @@ function DayCell({
         </button>
       </div>
       {posts.map((p) => (
-        <PostChip key={p.id} post={p} onClick={() => onOpen(p)} />
+        <PostChip
+          key={p.id}
+          post={p}
+          onClick={() => onOpen(p)}
+          full={tall}
+          stacked={tall}
+        />
       ))}
     </div>
   );
@@ -448,25 +541,81 @@ function DayCell({
 function PostChipView({
   post,
   full,
+  stacked,
   className,
 }: {
   post: Post;
   full?: boolean;
+  /** week view: a taller card with the details on their own row */
+  stacked?: boolean;
   className?: string;
 }) {
   const { data } = useHub();
   const assignee = post.assignee_id
     ? data.staff.find((s) => s.id === post.assignee_id)
     : null;
+  const commentCount = data.comments.reduce(
+    (n, c) => (c.post_id === post.id ? n + 1 : n),
+    0,
+  );
+  const border =
+    post.status === "published"
+      ? "border-navy/30"
+      : post.status === "review"
+        ? "border-gold"
+        : "border-silver-200";
+
+  if (stacked) {
+    return (
+      <div
+        className={clsx(
+          "w-full text-start rounded-lg border bg-white px-2.5 py-2 flex flex-col gap-1.5 transition",
+          border,
+          className,
+        )}
+      >
+        <div className="flex items-center gap-1.5">
+          <PlatformChip
+            platform={post.platform}
+            className="px-1.5 text-[10px]"
+          />
+          <span className="text-ink-2 text-[11px] font-bold">
+            {formatLabel(post.format)}
+          </span>
+          {post.scheduled_time && (
+            <span className="num text-[11px] text-ink-2 flex items-center gap-0.5 ms-auto">
+              <Clock size={10} /> {post.scheduled_time.slice(0, 5)}
+            </span>
+          )}
+        </div>
+        <span className="font-bold text-navy text-[13.5px] leading-snug line-clamp-3">
+          {post.title}
+        </span>
+        <div className="flex items-center gap-1.5 mt-auto">
+          <StatusChip status={post.status} className="text-[10px] px-1.5" />
+          {commentCount > 0 && (
+            <span className="num text-[11px] text-ink-2 flex items-center gap-0.5">
+              <MessageCircle size={11} /> {commentCount}
+            </span>
+          )}
+          {assignee && (
+            <Avatar
+              name={assignee.full_name}
+              size={20}
+              tone="light"
+              className="ms-auto"
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={clsx(
         "w-full text-start rounded-lg border bg-white px-2 py-1.5 flex items-start gap-1.5 transition",
-        post.status === "published"
-          ? "border-navy/30"
-          : post.status === "review"
-            ? "border-gold"
-            : "border-silver-200",
+        border,
         className,
       )}
     >
@@ -501,10 +650,12 @@ function PostChip({
   post,
   onClick,
   full,
+  stacked,
 }: {
   post: Post;
   onClick?: () => void;
   full?: boolean;
+  stacked?: boolean;
 }) {
   const { data } = useHub();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -525,7 +676,12 @@ function PostChip({
       )}
       title={`${post.title} · ${formatLabel(post.format)}${post.scheduled_time ? " · " + post.scheduled_time.slice(0, 5) : ""}${assignee ? " · " + assignee.full_name : ""}`}
     >
-      <PostChipView post={post} full={full} className="hover:border-ice" />
+      <PostChipView
+        post={post}
+        full={full}
+        stacked={stacked}
+        className="hover:border-ice"
+      />
     </button>
   );
 }

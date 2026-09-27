@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Clock, CalendarDays, CheckCheck } from "lucide-react";
+import { Plus, Clock, CalendarDays, CheckCheck, MessageCircle } from "lucide-react";
 import { DndContext, DragOverlay, closestCorners, useDroppable, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useDndSensors } from "./dnd";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -146,6 +146,7 @@ function CardView({ post, className }: { post: Post; className?: string }) {
   const { data } = useHub();
   const assignee = post.assignee_id ? data.staff.find((s) => s.id === post.assignee_id) : null;
   const campaign = post.campaign_id ? data.plan.find((c) => c.id === post.campaign_id) : null;
+  const commentCount = data.comments.reduce((n, c) => (c.post_id === post.id ? n + 1 : n), 0);
   return (
     <div className={clsx("rounded-xl border border-silver-200 bg-white p-3 flex flex-col gap-2 transition", className)}>
       <div className="flex items-center gap-1.5">
@@ -164,6 +165,11 @@ function CardView({ post, className }: { post: Post; className?: string }) {
         {post.scheduled_time && (
           <span className="num flex items-center gap-1">
             <Clock size={12} /> {post.scheduled_time.slice(0, 5)}
+          </span>
+        )}
+        {commentCount > 0 && (
+          <span className="num flex items-center gap-0.5" title="تعليقات">
+            <MessageCircle size={12} /> {commentCount}
           </span>
         )}
         {assignee && <Avatar name={assignee.full_name} size={22} tone="light" className="ms-auto" />}
