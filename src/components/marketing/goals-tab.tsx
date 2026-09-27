@@ -29,7 +29,8 @@ export default function GoalsTab() {
   const { data, insert, update, remove } = useHub();
   const confirm = useConfirm();
   const goals = data.goals;
-  const [editing, setEditing] = useState<Partial<Goal> | null>(null);
+  const [editing, setEditing] = useState<(Partial<Goal> & { target_text?: string; current_text?: string }) | null>(null);
+  const openEditor = (g: Partial<Goal>) => setEditing({ ...g, target_text: String(g.target_value ?? ""), current_text: String(g.current_value ?? "") });
 
   const sensors = useDndSensors();
 
@@ -58,8 +59,8 @@ export default function GoalsTab() {
       title: editing.title?.trim() || "هدف",
       platform: editing.platform,
       metric: editing.metric,
-      target_value: Number(editing.target_value) || 0,
-      current_value: Number(editing.current_value) || 0,
+      target_value: Number(editing.target_text) || 0,
+      current_value: Number(editing.current_text) || 0,
       unit: editing.unit ?? "",
       period_start: editing.period_start || null,
       period_end: editing.period_end || null,
@@ -82,7 +83,7 @@ export default function GoalsTab() {
         ) : (
           <div />
         )}
-        <button className="btn-primary" onClick={() => setEditing(blank())}>
+        <button className="btn-primary" onClick={() => openEditor(blank())}>
           <Plus size={18} /> هدف جديد
         </button>
       </div>
@@ -92,7 +93,7 @@ export default function GoalsTab() {
           title="ما فيه أهداف بعد"
           hint="ابدأ بهدف واضح: مثلاً 5,000 متابع على انستغرام قبل نهاية الموسم."
           action={
-            <button className="btn-accent" onClick={() => setEditing(blank())}>
+            <button className="btn-accent" onClick={() => openEditor(blank())}>
               <Plus size={18} /> أضف أول هدف
             </button>
           }
@@ -102,7 +103,7 @@ export default function GoalsTab() {
           <SortableContext items={goals.map((g) => g.id)} strategy={rectSortingStrategy}>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {goals.map((g) => (
-                <GoalCard key={g.id} goal={g} onEdit={() => setEditing(g)} onDelete={async () => (await confirm({ title: "حذف الهدف؟", message: `«${g.title}» بينحذف نهائياً.` })) && remove("goals", g.id)} onQuick={(v) => update("goals", g.id, { current_value: v })} />
+                <GoalCard key={g.id} goal={g} onEdit={() => openEditor(g)} onDelete={async () => (await confirm({ title: "حذف الهدف؟", message: `«${g.title}» بينحذف نهائياً.` })) && remove("goals", g.id)} onQuick={(v) => update("goals", g.id, { current_value: v })} />
               ))}
             </div>
           </SortableContext>
@@ -149,10 +150,10 @@ export default function GoalsTab() {
               </select>
             </Field>
             <Field label="المستهدف">
-              <input className="field num" dir="ltr" type="number" step="any" min={0} value={editing.target_value ?? 0} onChange={(e) => setEditing({ ...editing, target_value: Number(e.target.value) })} />
+              <input className="field num" dir="ltr" type="number" step="any" min={0} inputMode="decimal" value={editing.target_text ?? ""} onChange={(e) => setEditing({ ...editing, target_text: e.target.value })} placeholder="مثال: 5000" />
             </Field>
             <Field label="الحالي">
-              <input className="field num" dir="ltr" type="number" step="any" min={0} value={editing.current_value ?? 0} onChange={(e) => setEditing({ ...editing, current_value: Number(e.target.value) })} />
+              <input className="field num" dir="ltr" type="number" step="any" min={0} inputMode="decimal" value={editing.current_text ?? ""} onChange={(e) => setEditing({ ...editing, current_text: e.target.value })} placeholder="0" />
             </Field>
             <Field label="الوحدة">
               <input className="field" value={editing.unit ?? ""} onChange={(e) => setEditing({ ...editing, unit: e.target.value })} />

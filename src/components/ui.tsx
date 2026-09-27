@@ -26,6 +26,12 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // keep the latest onClose without making it a dependency: the setup effect below must run
+  // only when the dialog opens, never on each keystroke (that re-focused the first field)
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -38,7 +44,7 @@ export function Modal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === "Tab" && panel) {
@@ -73,7 +79,7 @@ export function Modal({
       window.scrollTo(0, scrollY);
       previouslyFocused?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
   return createPortal(
