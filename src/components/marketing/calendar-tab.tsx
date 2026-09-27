@@ -1,45 +1,121 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronRight, ChevronLeft, Plus, Inbox, Lightbulb, Clock } from "lucide-react";
-import { DndContext, DragOverlay, useDraggable, useDroppable, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
+import {
+  ChevronRight,
+  ChevronLeft,
+  Plus,
+  Inbox,
+  Lightbulb,
+  Clock,
+} from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { useDndSensors } from "./dnd";
-import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday, startOfMonth, startOfWeek } from "date-fns";
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { useHub } from "./store";
+import { useMediaQuery } from "@/lib/use-media-query";
 import PostModal, { type PostDraft } from "./post-modal";
 import { PlatformChip, StatusChip, Avatar } from "@/components/ui";
-import { PLATFORMS, formatLabel, type Idea, type Platform, type Post } from "@/lib/types";
+import {
+  PLATFORMS,
+  formatLabel,
+  type Idea,
+  type Platform,
+  type Post,
+} from "@/lib/types";
 
 const WEEK_START = 6; // Saturday
-const DAY_NAMES = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+const DAY_NAMES = [
+  "السبت",
+  "الأحد",
+  "الاثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+];
+
+function draftFromIdea(idea: Idea, date?: string): PostDraft {
+  return {
+    title: idea.title,
+    caption: idea.body,
+    platform: idea.platform === "general" ? "instagram" : idea.platform,
+    status: "draft",
+    scheduled_date: date ?? null,
+    idea_id: idea.id,
+  };
+}
 
 export default function CalendarTab() {
   const { data, update, insert } = useHub();
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
   const [platformFilter, setPlatformFilter] = useState<Platform | null>(null);
   const [draft, setDraft] = useState<PostDraft | null>(null);
-  const [active, setActive] = useState<{ kind: "post" | "idea"; item: Post | Idea } | null>(null);
+  const [active, setActive] = useState<{
+    kind: "post" | "idea";
+    item: Post | Idea;
+  } | null>(null);
   const [trayOpen, setTrayOpen] = useState(false);
 
-  const sensors = useDndSensors();
+  const sensors = useDndSensors({ keyboard: false });
+  // phones get an agenda instead of the grid. Rendered exclusively (not CSS-hidden) so a post is never
+  // registered twice as a draggable — duplicate ids break drag-and-drop.
+  const isMd = useMediaQuery("(min-width: 768px)");
 
   const days = useMemo(
-    () => eachDayOfInterval({ start: startOfWeek(startOfMonth(month), { weekStartsOn: WEEK_START }), end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_START }) }),
+    () =>
+      eachDayOfInterval({
+        start: startOfWeek(startOfMonth(month), { weekStartsOn: WEEK_START }),
+        end: endOfWeek(endOfMonth(month), { weekStartsOn: WEEK_START }),
+      }),
     [month],
   );
 
-  const posts = useMemo(() => (platformFilter ? data.posts.filter((p) => p.platform === platformFilter) : data.posts), [data.posts, platformFilter]);
+  const posts = useMemo(
+    () =>
+      platformFilter
+        ? data.posts.filter((p) => p.platform === platformFilter)
+        : data.posts,
+    [data.posts, platformFilter],
+  );
   const scheduled = posts.filter((p) => p.scheduled_date);
   const unscheduled = posts.filter((p) => !p.scheduled_date);
-  const ideas = data.ideas.filter((i) => !i.is_note && !i.moved_post_id);
-  const monthCount = scheduled.filter((p) => isSameMonth(new Date(p.scheduled_date!), month)).length;
+  const ideas = data.ideas.filter(
+    (i) => !i.is_note && !i.moved_post_id && !i.archived,
+  );
+  const monthCount = scheduled.filter((p) =>
+    isSameMonth(parseISO(p.scheduled_date!), month),
+  ).length;
 
   const byDay = (d: Date) =>
     scheduled
-      .filter((p) => isSameDay(new Date(p.scheduled_date!), d))
-      .sort((a, b) => (a.scheduled_time ?? "99").localeCompare(b.scheduled_time ?? "99") || a.position - b.position);
+      .filter((p) => isSameDay(parseISO(p.scheduled_date!), d))
+      .sort(
+        (a, b) =>
+          (a.scheduled_time ?? "99").localeCompare(b.scheduled_time ?? "99") ||
+          a.position - b.position,
+      );
 
   function onDragStart(e: DragStartEvent) {
     const id = String(e.active.id);
@@ -60,42 +136,68 @@ export default function CalendarTab() {
     if (a.kind === "post") {
       const post = a.item as Post;
       if (over === "tray-unscheduled") {
-        if (post.scheduled_date) await update("posts", post.id, { scheduled_date: null, status: post.status === "scheduled" ? "approved" : post.status });
+        if (post.scheduled_date)
+          await update("posts", post.id, {
+            scheduled_date: null,
+            status: post.status === "scheduled" ? "approved" : post.status,
+          });
       } else if (over.startsWith("day-")) {
         const date = over.slice(4);
-        if (post.scheduled_date !== date) await update("posts", post.id, { scheduled_date: date, status: post.status === "idea" || post.status === "draft" ? post.status : post.status });
+        if (post.scheduled_date !== date) {
+          // an approved post that gets a date becomes "scheduled"
+          await update("posts", post.id, {
+            scheduled_date: date,
+            status: post.status === "approved" ? "scheduled" : post.status,
+          });
+        }
       }
     } else if (a.kind === "idea" && over.startsWith("day-")) {
       const idea = a.item as Idea;
       const created = await insert<Post>("posts", {
-        title: idea.title,
-        caption: idea.body,
-        platform: idea.platform === "general" ? "instagram" : idea.platform,
-        status: "draft",
-        scheduled_date: over.slice(4),
-        idea_id: idea.id,
+        ...draftFromIdea(idea, over.slice(4)),
         position: data.posts.length,
       });
-      if (created) await update("ideas", idea.id, { moved_post_id: created.id });
+      if (created)
+        await update("ideas", idea.id, { moved_post_id: created.id });
     }
   }
 
   const tray = (
     <div className="flex flex-col gap-4">
-      <TrayZone id="tray-unscheduled" icon={<Inbox size={16} className="text-ice" />} title="غير مجدول" count={unscheduled.length} hint="اسحب منشور هنا لإلغاء موعده">
+      <TrayZone
+        id="tray-unscheduled"
+        icon={<Inbox size={16} className="text-ice" />}
+        title="غير مجدول"
+        count={unscheduled.length}
+        hint="اسحب منشور هنا لإلغاء موعده"
+      >
         {unscheduled.map((p) => (
           <PostChip key={p.id} post={p} onClick={() => setDraft(p)} full />
         ))}
       </TrayZone>
       <div className="card p-3">
-        <div className="flex items-center gap-2 mb-2 text-navy font-extrabold text-[15px]">
-          <Lightbulb size={16} className="text-gold" /> أفكار جاهزة للنقل <span className="num text-ink-2 text-sm font-bold">{ideas.length}</span>
+        <div className="flex items-center gap-2 mb-1 text-navy font-extrabold text-[15px]">
+          <Lightbulb size={16} className="text-gold" /> أفكار جاهزة للنقل{" "}
+          <span className="num text-ink-2 text-sm font-bold">
+            {ideas.length}
+          </span>
         </div>
-        <p className="text-ink-2 text-xs mb-2">اسحب الفكرة على أي يوم وتتحول لمنشور</p>
+        <p className="text-ink-2 text-xs mb-2">
+          <span className="hidden md:inline">اسحب الفكرة على أي يوم، أو </span>
+          اضغط عليها لتحديد موعدها
+        </p>
         <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
-          {ideas.length === 0 && <p className="text-ink-2 text-sm text-center py-3">لا توجد أفكار غير منقولة</p>}
+          {ideas.length === 0 && (
+            <p className="text-ink-2 text-sm text-center py-3">
+              لا توجد أفكار غير منقولة
+            </p>
+          )}
           {ideas.map((i) => (
-            <IdeaChip key={i.id} idea={i} />
+            <IdeaChip
+              key={i.id}
+              idea={i}
+              onClick={() => setDraft(draftFromIdea(i))}
+            />
           ))}
         </div>
       </div>
@@ -103,39 +205,90 @@ export default function CalendarTab() {
   );
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext
+      id="calendar-dnd"
+      sensors={sensors}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setActive(null)}
+    >
       <div className="flex flex-col gap-4">
         {/* toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="card flex items-center p-1">
-            <button onClick={() => setMonth((m) => addMonths(m, -1))} className="p-2 rounded-lg hover:bg-navy-50 text-navy" aria-label="الشهر السابق">
+            <button
+              onClick={() => setMonth((m) => addMonths(m, -1))}
+              className="h-10 w-10 grid place-items-center rounded-lg hover:bg-navy-50 text-navy"
+              aria-label="الشهر السابق"
+            >
               <ChevronRight size={18} />
             </button>
-            <button onClick={() => setMonth(startOfMonth(new Date()))} className="px-3 py-1.5 font-extrabold text-navy min-w-36 text-center">
+            <button
+              onClick={() => setMonth(startOfMonth(new Date()))}
+              className="px-3 h-10 font-extrabold text-navy min-w-36 text-center"
+              title="العودة لهذا الشهر"
+            >
               {format(month, "LLLL yyyy", { locale: ar })}
             </button>
-            <button onClick={() => setMonth((m) => addMonths(m, 1))} className="p-2 rounded-lg hover:bg-navy-50 text-navy" aria-label="الشهر التالي">
+            <button
+              onClick={() => setMonth((m) => addMonths(m, 1))}
+              className="h-10 w-10 grid place-items-center rounded-lg hover:bg-navy-50 text-navy"
+              aria-label="الشهر التالي"
+            >
               <ChevronLeft size={18} />
             </button>
           </div>
           <span className="text-ink-2 text-sm">
-            <span className="num font-bold text-navy">{monthCount}</span> منشور هذا الشهر
+            <span className="num font-bold text-navy">{monthCount}</span> منشور
+            هذا الشهر
           </span>
           <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
-            <button onClick={() => setPlatformFilter(null)} className={clsx("chip px-2.5 py-1", !platformFilter ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+            <button
+              onClick={() => setPlatformFilter(null)}
+              className={clsx(
+                "chip px-2.5 h-8",
+                !platformFilter
+                  ? "bg-navy text-white"
+                  : "bg-white border border-silver-200 text-navy",
+              )}
+            >
               الكل
             </button>
             {PLATFORMS.filter((p) => p.value !== "general").map((p) => (
-              <button key={p.value} onClick={() => setPlatformFilter(platformFilter === p.value ? null : p.value)} className={clsx("chip px-2.5 py-1 whitespace-nowrap", platformFilter === p.value ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+              <button
+                key={p.value}
+                onClick={() =>
+                  setPlatformFilter(platformFilter === p.value ? null : p.value)
+                }
+                className={clsx(
+                  "chip px-2.5 h-8 whitespace-nowrap",
+                  platformFilter === p.value
+                    ? "bg-navy text-white"
+                    : "bg-white border border-silver-200 text-navy",
+                )}
+              >
                 {p.label}
               </button>
             ))}
           </div>
           <div className="ms-auto flex gap-2">
-            <button className="btn-outline h-9 px-3 xl:hidden" onClick={() => setTrayOpen((o) => !o)}>
-              <Inbox size={16} /> <span className="num">{unscheduled.length}</span>
+            <button
+              className="btn-outline h-10 px-3 xl:hidden"
+              onClick={() => setTrayOpen((o) => !o)}
+              title="غير المجدول والأفكار"
+            >
+              <Inbox size={16} />{" "}
+              <span className="num">{unscheduled.length}</span>
+              {ideas.length > 0 && (
+                <span className="num text-gold">+{ideas.length}</span>
+              )}
             </button>
-            <button className="btn-primary h-9 px-3" onClick={() => setDraft({ status: "draft", platform: "instagram" })}>
+            <button
+              className="btn-primary h-10 px-3"
+              onClick={() =>
+                setDraft({ status: "draft", platform: "instagram" })
+              }
+            >
               <Plus size={16} /> منشور
             </button>
           </div>
@@ -145,50 +298,87 @@ export default function CalendarTab() {
 
         <div className="grid xl:grid-cols-[1fr_280px] gap-4 items-start">
           {/* month grid (md+) */}
-          <div className="card overflow-hidden hidden md:block">
-            <div className="grid grid-cols-7 bg-navy text-white text-xs font-bold">
-              {DAY_NAMES.map((d) => (
-                <div key={d} className="px-2 py-2 text-center">
-                  {d}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7">
-              {days.map((d) => (
-                <DayCell key={d.toISOString()} date={d} inMonth={isSameMonth(d, month)} posts={byDay(d)} onOpen={(p) => setDraft(p)} onAdd={() => setDraft({ status: "draft", platform: "instagram", scheduled_date: format(d, "yyyy-MM-dd") })} />
-              ))}
-            </div>
-          </div>
-
-          {/* agenda (mobile) */}
-          <div className="md:hidden flex flex-col gap-2">
-            {days.filter((d) => isSameMonth(d, month) && byDay(d).length).length === 0 && (
-              <div className="card p-6 text-center text-ink-2 text-sm">لا توجد منشورات مجدولة هذا الشهر</div>
-            )}
-            {days
-              .filter((d) => isSameMonth(d, month) && byDay(d).length)
-              .map((d) => (
-                <div key={d.toISOString()} className="card p-3">
-                  <div className={clsx("flex items-center gap-2 mb-2 font-extrabold", isToday(d) ? "text-ice-600" : "text-navy")}>
-                    <span className="num text-[20px]">{format(d, "d")}</span>
-                    <span className="text-sm">{format(d, "EEEE", { locale: ar })}</span>
+          {isMd ? (
+            <div className="card overflow-hidden">
+              <div className="grid grid-cols-7 bg-navy text-white text-xs font-bold">
+                {DAY_NAMES.map((d) => (
+                  <div key={d} className="px-2 py-2 text-center">
+                    {d}
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    {byDay(d).map((p) => (
-                      <PostChip key={p.id} post={p} onClick={() => setDraft(p)} full />
-                    ))}
-                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {days.map((d) => (
+                  <DayCell
+                    key={d.toISOString()}
+                    date={d}
+                    inMonth={isSameMonth(d, month)}
+                    posts={byDay(d)}
+                    onOpen={(p) => setDraft(p)}
+                    onAdd={() =>
+                      setDraft({
+                        status: "draft",
+                        platform: "instagram",
+                        scheduled_date: format(d, "yyyy-MM-dd"),
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {days.filter((d) => isSameMonth(d, month) && byDay(d).length)
+                .length === 0 && (
+                <div className="card p-6 text-center text-ink-2 text-sm">
+                  لا توجد منشورات مجدولة هذا الشهر
                 </div>
-              ))}
-          </div>
+              )}
+              {days
+                .filter((d) => isSameMonth(d, month) && byDay(d).length)
+                .map((d) => (
+                  <div key={d.toISOString()} className="card p-3">
+                    <div
+                      className={clsx(
+                        "flex items-center gap-2 mb-2 font-extrabold",
+                        isToday(d) ? "text-ice-600" : "text-navy",
+                      )}
+                    >
+                      <span className="num text-[20px]">{format(d, "d")}</span>
+                      <span className="text-sm">
+                        {format(d, "EEEE", { locale: ar })}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {byDay(d).map((p) => (
+                        <PostChip
+                          key={p.id}
+                          post={p}
+                          onClick={() => setDraft(p)}
+                          full
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
 
           <div className="hidden xl:block">{tray}</div>
         </div>
       </div>
 
       <DragOverlay dropAnimation={null}>
-        {active?.kind === "post" && <div className="dragging"><PostChip post={active.item as Post} full /></div>}
-        {active?.kind === "idea" && <div className="dragging"><IdeaChip idea={active.item as Idea} overlay /></div>}
+        {active?.kind === "post" && (
+          <div className="dragging w-[220px]">
+            <PostChipView post={active.item as Post} full />
+          </div>
+        )}
+        {active?.kind === "idea" && (
+          <div className="dragging w-[220px]">
+            <IdeaChipView idea={active.item as Idea} />
+          </div>
+        )}
       </DragOverlay>
 
       <PostModal draft={draft} onClose={() => setDraft(null)} />
@@ -196,7 +386,19 @@ export default function CalendarTab() {
   );
 }
 
-function DayCell({ date, inMonth, posts, onOpen, onAdd }: { date: Date; inMonth: boolean; posts: Post[]; onOpen: (p: Post) => void; onAdd: () => void }) {
+function DayCell({
+  date,
+  inMonth,
+  posts,
+  onOpen,
+  onAdd,
+}: {
+  date: Date;
+  inMonth: boolean;
+  posts: Post[];
+  onOpen: (p: Post) => void;
+  onAdd: () => void;
+}) {
   const id = `day-${format(date, "yyyy-MM-dd")}`;
   const { setNodeRef, isOver } = useDroppable({ id });
   const today = isToday(date);
@@ -213,9 +415,24 @@ function DayCell({ date, inMonth, posts, onOpen, onAdd }: { date: Date; inMonth:
         isOver && "bg-ice-50 ring-2 ring-inset ring-ice",
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className={clsx("num text-[13px] font-bold h-6 w-6 grid place-items-center rounded-full", today ? "bg-ice text-navy-900" : inMonth ? "text-navy" : "text-silver")}>{format(date, "d")}</span>
-        <button onClick={onAdd} className="reveal hidden [@media(hover:hover)_and_(pointer:fine)]:grid text-ink-2 hover:text-navy h-7 w-7 -m-1 place-items-center rounded-md" aria-label="منشور جديد في هذا اليوم">
+      <div className="flex items-center justify-between pointer-events-none">
+        <span
+          className={clsx(
+            "num text-[13px] font-bold h-6 w-6 grid place-items-center rounded-full",
+            today
+              ? "bg-ice text-navy-900"
+              : inMonth
+                ? "text-navy"
+                : "text-silver",
+          )}
+        >
+          {format(date, "d")}
+        </span>
+        <button
+          onClick={onAdd}
+          className="reveal pointer-events-auto hidden [@media(hover:hover)_and_(pointer:fine)]:grid text-ink-2 hover:text-navy h-7 w-7 -m-1 place-items-center rounded-md"
+          aria-label="منشور جديد في هذا اليوم"
+        >
           <Plus size={14} />
         </button>
       </div>
@@ -226,10 +443,76 @@ function DayCell({ date, inMonth, posts, onOpen, onAdd }: { date: Date; inMonth:
   );
 }
 
-function PostChip({ post, onClick, full }: { post: Post; onClick?: () => void; full?: boolean }) {
+/* ---------- chips: a hook-free view + a draggable wrapper (the DragOverlay must render the view only) ---------- */
+
+function PostChipView({
+  post,
+  full,
+  className,
+}: {
+  post: Post;
+  full?: boolean;
+  className?: string;
+}) {
   const { data } = useHub();
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `post-${post.id}` });
-  const assignee = post.assignee_id ? data.staff.find((s) => s.id === post.assignee_id) : null;
+  const assignee = post.assignee_id
+    ? data.staff.find((s) => s.id === post.assignee_id)
+    : null;
+  return (
+    <div
+      className={clsx(
+        "w-full text-start rounded-lg border bg-white px-2 py-1.5 flex items-start gap-1.5 transition",
+        post.status === "published"
+          ? "border-navy/30"
+          : post.status === "review"
+            ? "border-gold"
+            : "border-silver-200",
+        className,
+      )}
+    >
+      <PlatformChip
+        platform={post.platform}
+        className="px-1.5 text-[10px] mt-px"
+      />
+      <span
+        className={clsx(
+          "flex-1 font-bold text-navy leading-snug",
+          full ? "text-[13.5px] truncate" : "text-[12.5px] line-clamp-2",
+        )}
+      >
+        {post.title}
+      </span>
+      {full && post.scheduled_time && (
+        <span className="num text-[11px] text-ink-2 flex items-center gap-0.5 shrink-0">
+          <Clock size={10} /> {post.scheduled_time.slice(0, 5)}
+        </span>
+      )}
+      {full && (
+        <StatusChip status={post.status} className="text-[10px] px-1.5" />
+      )}
+      {full && assignee && (
+        <Avatar name={assignee.full_name} size={20} tone="light" />
+      )}
+    </div>
+  );
+}
+
+function PostChip({
+  post,
+  onClick,
+  full,
+}: {
+  post: Post;
+  onClick?: () => void;
+  full?: boolean;
+}) {
+  const { data } = useHub();
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `post-${post.id}`,
+  });
+  const assignee = post.assignee_id
+    ? data.staff.find((s) => s.id === post.assignee_id)
+    : null;
   return (
     <button
       ref={setNodeRef}
@@ -237,44 +520,83 @@ function PostChip({ post, onClick, full }: { post: Post; onClick?: () => void; f
       {...listeners}
       onClick={onClick}
       className={clsx(
-        "w-full text-start rounded-lg border bg-white px-2 py-1.5 flex items-start gap-1.5 hover:border-ice transition touch-manipulation select-none [-webkit-touch-callout:none]",
-        post.status === "published" ? "border-navy/30" : post.status === "review" ? "border-gold" : "border-silver-200",
+        "w-full text-start rounded-lg touch-manipulation select-none [-webkit-touch-callout:none] focus:outline-none focus-visible:ring-2 focus-visible:ring-ice",
         isDragging && "opacity-30",
       )}
       title={`${post.title} · ${formatLabel(post.format)}${post.scheduled_time ? " · " + post.scheduled_time.slice(0, 5) : ""}${assignee ? " · " + assignee.full_name : ""}`}
     >
-      <PlatformChip platform={post.platform} className="px-1.5 text-[10px] mt-px" />
-      <span className={clsx("flex-1 font-bold text-navy leading-snug", full ? "text-[13.5px] truncate" : "text-[12.5px] line-clamp-2")}>{post.title}</span>
-      {full && post.scheduled_time && (
-        <span className="num text-[11px] text-ink-2 flex items-center gap-0.5 shrink-0">
-          <Clock size={10} /> {post.scheduled_time.slice(0, 5)}
-        </span>
-      )}
-      {full && <StatusChip status={post.status} className="text-[10px] px-1.5" />}
-      {full && assignee && <Avatar name={assignee.full_name} size={20} tone="light" />}
+      <PostChipView post={post} full={full} className="hover:border-ice" />
     </button>
   );
 }
 
-function IdeaChip({ idea, overlay }: { idea: Idea; overlay?: boolean }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `idea-${idea.id}` });
+function IdeaChipView({ idea, className }: { idea: Idea; className?: string }) {
   return (
-    <div ref={overlay ? undefined : setNodeRef} {...(overlay ? {} : { ...attributes, ...listeners })} className={clsx("rounded-lg border border-gold-100 bg-gold-100/60 px-2.5 py-1.5 text-[13px] font-bold text-navy-900 cursor-grab active:cursor-grabbing touch-manipulation select-none [-webkit-touch-callout:none] flex items-center gap-1.5", isDragging && "opacity-30")}>
+    <div
+      className={clsx(
+        "rounded-lg border border-gold-100 bg-gold-100/60 px-2.5 py-2 text-[13px] font-bold text-navy-900 flex items-center gap-1.5",
+        className,
+      )}
+    >
       <Lightbulb size={13} className="text-gold shrink-0" />
       <span className="truncate">{idea.title}</span>
     </div>
   );
 }
 
-function TrayZone({ id, icon, title, count, hint, children }: { id: string; icon: React.ReactNode; title: string; count: number; hint: string; children: React.ReactNode }) {
+function IdeaChip({ idea, onClick }: { idea: Idea; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `idea-${idea.id}`,
+  });
+  return (
+    <button
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={onClick}
+      className={clsx(
+        "w-full text-start cursor-grab active:cursor-grabbing touch-manipulation select-none [-webkit-touch-callout:none] rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ice",
+        isDragging && "opacity-30",
+      )}
+      title="اضغط لتحديد الموعد أو اسحب إلى يوم"
+    >
+      <IdeaChipView idea={idea} className="hover:border-gold" />
+    </button>
+  );
+}
+
+function TrayZone({
+  id,
+  icon,
+  title,
+  count,
+  hint,
+  children,
+}: {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  hint: string;
+  children: React.ReactNode;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={clsx("card p-3 transition", isOver && "ring-2 ring-ice bg-ice-50")}>
+    <div
+      ref={setNodeRef}
+      className={clsx(
+        "card p-3 transition",
+        isOver && "ring-2 ring-ice bg-ice-50",
+      )}
+    >
       <div className="flex items-center gap-2 mb-1 text-navy font-extrabold text-[15px]">
-        {icon} {title} <span className="num text-ink-2 text-sm font-bold">{count}</span>
+        {icon} {title}{" "}
+        <span className="num text-ink-2 text-sm font-bold">{count}</span>
       </div>
-      <p className="text-ink-2 text-xs mb-2">{hint}</p>
-      <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto min-h-10">{children}</div>
+      <p className="text-ink-2 text-xs mb-2 hidden md:block">{hint}</p>
+      <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto min-h-10">
+        {children}
+      </div>
     </div>
   );
 }

@@ -32,7 +32,7 @@ export default function MarketingHub({ initial, me }: { initial: HubData; me: { 
 }
 
 function navigateHash(id: string) {
-  window.history.pushState(null, "", `#${id}`);
+  window.history.replaceState(null, "", `#${id}`);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
 }
 
@@ -42,7 +42,7 @@ function subscribeHash(cb: () => void) {
 }
 
 function HubInner() {
-  const { online, connected, setTab, me, data } = useHub();
+  const { online, connected, setTab, me, data, toasts } = useHub();
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash, () => "");
   const tab: TabId = TABS.some((t) => `#${t.id}` === hash) ? (hash.slice(1) as TabId) : "goals";
   const setTabState = (id: TabId) => navigateHash(id);
@@ -132,6 +132,15 @@ function HubInner() {
       </div>
 
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} />
+
+      {/* toasts */}
+      <div aria-live="polite" className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] flex flex-col gap-2 items-center md:items-end pointer-events-none">
+        {toasts.map((t) => (
+          <div key={t.id} className={clsx("fade-up rounded-xl px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] pointer-events-auto", t.kind === "error" ? "bg-error text-white" : "bg-navy text-white")}>
+            {t.text}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

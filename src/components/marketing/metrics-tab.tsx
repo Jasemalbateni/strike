@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Save, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { format, startOfWeek } from "date-fns";
+import { format, parseISO, startOfWeek } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { useHub } from "./store";
@@ -11,57 +11,83 @@ import { PLATFORMS, platformLabel, metricLabel, type MetricRow, type Platform } 
 
 const WEEK_START = 6;
 type Key = "followers" | "reach" | "engagement" | "views" | "leads" | "spend";
-const KEYS: { key: Key; label: string }[] = [
-  { key: "followers", label: "المتابعين" },
-  { key: "reach", label: "الوصول" },
-  { key: "engagement", label: "التفاعل" },
-  { key: "views", label: "المشاهدات" },
-  { key: "leads", label: "طلبات التسجيل" },
-  { key: "spend", label: "الصرف (د.ك)" },
+const KEYS: { key: Key; label: string; int: boolean }[] = [
+  { key: "followers", label: "المتابعين", int: true },
+  { key: "reach", label: "الوصول", int: true },
+  { key: "engagement", label: "التفاعل %", int: false },
+  { key: "views", label: "المشاهدات", int: true },
+  { key: "leads", label: "طلبات التسجيل", int: true },
+  { key: "spend", label: "الصرف (د.ك)", int: false },
 ];
+const EMPTY: Record<Key, string> = { followers: "", reach: "", engagement: "", views: "", leads: "", spend: "" };
+
+/** any date → the Saturday that starts its week */
+const snapToWeek = (d: string) => format(startOfWeek(parseISO(d), { weekStartsOn: WEEK_START }), "yyyy-MM-dd");
 
 export default function MetricsTab() {
-  const { data, insert, update, remove } = useHub();
+  const { data, upsert, remove } = useHub();
   const [platform, setPlatform] = useState<Platform>("instagram");
   const [week, setWeek] = useState(() => format(startOfWeek(new Date(), { weekStartsOn: WEEK_START }), "yyyy-MM-dd"));
-  const [vals, setVals] = useState<Record<Key, string>>({ followers: "", reach: "", engagement: "", views: "", leads: "", spend: "" });
-  const [notes, setNotes] = useState("");
+  // the form shows the live row for (platform, week) until the user starts typing; edits live in `edits`
+  const [edits, setEdits] = useState<{ vals: Record<Key, string>; notes: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [series, setSeries] = useState<Key>("followers");
   const [showAll, setShowAll] = useState(false);
 
   const existing = data.metrics.find((m) => m.platform === platform && m.week_start === week);
+  const base = useMemo(
+    () => ({
+      vals: existing
+        ? {
+            followers: String(existing.followers),
+            reach: String(existing.reach),
+            engagement: String(existing.engagement),
+            views: String(existing.views),
+            leads: String(existing.leads),
+            spend: String(existing.spend),
+          }
+        : EMPTY,
+      notes: existing?.notes ?? "",
+    }),
+    [existing],
+  );
+  const form = edits ?? base;
+  const vals = form.vals;
+  const notes = form.notes;
+
+  function setVal(k: Key, v: string) {
+    setEdits((prev) => {
+      const cur = prev ?? base;
+      return { ...cur, vals: { ...cur.vals, [k]: v } };
+    });
+  }
+  function setNotes(v: string) {
+    setEdits((prev) => ({ ...(prev ?? base), notes: v }));
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
+    const num = (k: Key) => {
+      const n = Number(vals[k]);
+      if (!Number.isFinite(n) || n < 0) return 0;
+      return KEYS.find((x) => x.key === k)!.int ? Math.round(n) : Math.round(n * 100) / 100;
+    };
     const values = {
       platform,
       week_start: week,
-      followers: Number(vals.followers) || 0,
-      reach: Number(vals.reach) || 0,
-      engagement: Number(vals.engagement) || 0,
-      views: Number(vals.views) || 0,
-      leads: Number(vals.leads) || 0,
-      spend: Number(vals.spend) || 0,
+      followers: num("followers"),
+      reach: num("reach"),
+      engagement: num("engagement"),
+      views: num("views"),
+      leads: num("leads"),
+      spend: num("spend"),
       notes,
     };
-    if (existing) await update("metrics", existing.id, values);
-    else await insert("metrics", values);
+    const row = await upsert("metrics", values, "platform,week_start");
+    if (!row) return;
+    setEdits(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
-  }
-
-  function loadExisting(p: Platform, w: string) {
-    const row = data.metrics.find((m) => m.platform === p && m.week_start === w);
-    setVals({
-      followers: row ? String(row.followers) : "",
-      reach: row ? String(row.reach) : "",
-      engagement: row ? String(row.engagement) : "",
-      views: row ? String(row.views) : "",
-      leads: row ? String(row.leads) : "",
-      spend: row ? String(row.spend) : "",
-    });
-    setNotes(row?.notes ?? "");
   }
 
   const perPlatform = useMemo(() => {
@@ -95,7 +121,7 @@ export default function MetricsTab() {
               includeGeneral={false}
               onChange={(p) => {
                 setPlatform(p);
-                loadExisting(p, week);
+                setEdits(null);
               }}
             />
           </Field>
@@ -106,8 +132,9 @@ export default function MetricsTab() {
               type="date"
               value={week}
               onChange={(e) => {
-                setWeek(e.target.value);
-                loadExisting(platform, e.target.value);
+                if (!e.target.value) return;
+                setWeek(snapToWeek(e.target.value));
+                setEdits(null);
               }}
               required
             />
@@ -115,15 +142,15 @@ export default function MetricsTab() {
           <div className="grid grid-cols-2 gap-3">
             {KEYS.map((k) => (
               <Field key={k.key} label={k.label}>
-                <input className="field num" dir="ltr" type="number" step="any" min={0} value={vals[k.key]} onChange={(e) => setVals({ ...vals, [k.key]: e.target.value })} placeholder="0" />
+                <input className="field num" dir="ltr" type="number" step={k.int ? 1 : "any"} min={0} inputMode="decimal" value={vals[k.key]} onChange={(e) => setVal(k.key, e.target.value)} placeholder="0" />
               </Field>
             ))}
           </div>
           <Field label="ملاحظة">
             <input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي شي أثّر على الأرقام هذا الأسبوع" />
           </Field>
-          <button className={clsx("btn-primary", saved && "bg-ice text-navy-900")}>
-            <Save size={17} /> {saved ? "تم الحفظ" : existing ? "تحديث الأسبوع" : "حفظ"}
+          <button className={clsx("btn-primary", saved && "bg-ice text-navy-900")} disabled={!edits && !!existing}>
+            <Save size={17} /> {saved ? "تم الحفظ" : edits ? (existing ? "تحديث الأسبوع" : "حفظ الأسبوع") : existing ? "محفوظ" : "حفظ الأسبوع"}
           </button>
         </form>
 
@@ -204,7 +231,7 @@ export default function MetricsTab() {
                     </td>
                   ))}
                   <td className="px-2 py-2 text-end">
-                    <button onClick={() => confirm("حذف هذا الأسبوع؟") && remove("metrics", m.id)} className="p-1.5 rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+                    <button onClick={() => confirm("حذف هذا الأسبوع؟") && remove("metrics", m.id)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
                       <Trash2 size={15} />
                     </button>
                   </td>
@@ -247,7 +274,7 @@ function TrendCard({ platform, rows, metric }: { platform: Platform; rows: Metri
         <PlatformChip platform={platform} />
         <span className="font-bold text-navy text-[14px]">{platformLabel(platform)}</span>
         <span className="text-ink-2 text-xs ms-auto num" dir="ltr">
-          {format(new Date(last.week_start), "d MMM", { locale: ar })}
+          {format(parseISO(last.week_start), "d MMM", { locale: ar })}
         </span>
       </div>
       <div className="flex items-end gap-2">
@@ -274,7 +301,7 @@ function TrendCard({ platform, rows, metric }: { platform: Platform; rows: Metri
         {pts.length > 1 && <path d={area} fill={`url(#g-${platform})`} />}
         <path d={path} fill="none" stroke="#1C2D5A" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {pts.map((v, i) => (
-          <g key={i} onMouseEnter={() => setHover(i)}>
+          <g key={i} onMouseEnter={() => setHover(i)} onClick={() => setHover((h) => (h === i ? null : i))} onTouchStart={() => setHover(i)}>
             <rect x={x(i) - 12} y={0} width={24} height={H} fill="transparent" />
             <circle cx={x(i)} cy={y(v)} r={hover === i ? 5 : i === pts.length - 1 ? 4 : 0} fill="#4DA8FF" stroke="#fff" strokeWidth="2" />
           </g>

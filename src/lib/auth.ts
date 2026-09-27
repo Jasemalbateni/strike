@@ -11,7 +11,8 @@ export const getProfile = cache(async (): Promise<Profile> => {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
-  if (!data || !data.is_active) redirect("/login?inactive=1");
+  // deleted or deactivated while signed in → clear the session, then show the message on the login page
+  if (!data || !data.is_active) redirect("/auth/signout?reason=inactive");
   return data as Profile;
 });
 

@@ -2,13 +2,15 @@ import Link from "next/link";
 import { Megaphone, Users, Settings, ArrowLeft, Dumbbell, CalendarCheck, ClipboardList, Wallet } from "lucide-react";
 import { getProfile, canAccessMarketing } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { format } from "date-fns";
 
+const KW = "Asia/Kuwait";
 function greeting() {
-  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "Asia/Kuwait" }));
-  if (h < 12) return "صباح الخير";
-  if (h < 17) return "مساء الخير";
-  return "مساء الخير";
+  const h = Number(new Date().toLocaleString("en-US", { hour: "numeric", hourCycle: "h23", timeZone: KW }));
+  return h < 12 ? "صباح الخير" : "مساء الخير";
+}
+/** today's date in Kuwait as yyyy-MM-dd (the server runs in UTC) */
+function todayKW() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: KW, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 export default async function HomePage() {
@@ -19,7 +21,7 @@ export default async function HomePage() {
   let upcoming = 0;
   let review = 0;
   if (marketing) {
-    const today = format(new Date(), "yyyy-MM-dd");
+    const today = todayKW();
     const [{ count: c1 }, { count: c2 }] = await Promise.all([
       supabase.from("mk_posts").select("id", { count: "exact", head: true }).gte("scheduled_date", today).neq("status", "published"),
       supabase.from("mk_posts").select("id", { count: "exact", head: true }).eq("status", "review"),

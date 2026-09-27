@@ -156,7 +156,7 @@ function Section({
           <h3 className="text-navy font-extrabold text-[17px]">{label}</h3>
           {hint && <p className="text-ink-2 text-xs mt-0.5">{hint}</p>}
         </div>
-        <button onClick={onAdd} className="btn-outline h-8 px-2.5 text-sm shrink-0">
+        <button onClick={onAdd} className="btn-outline h-9 px-2.5 text-sm shrink-0">
           <Plus size={15} /> إضافة
         </button>
       </div>
@@ -168,7 +168,7 @@ function Section({
       {items.length === 0 ? (
         <p className="text-ink-2 text-sm rounded-xl border border-dashed border-silver p-4 text-center">لا شي هنا بعد</p>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext id={`plan-dnd-${kind}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <ul className="flex flex-col gap-2">
               {items.map((it) => (
@@ -186,7 +186,7 @@ function PlanCard({ item, onEdit, onDelete }: { item: PlanItem; onEdit: () => vo
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={clsx("group rounded-xl border border-silver-200 bg-white p-3 flex gap-2", isDragging && "dragging z-10")}>
-      <button {...attributes} {...listeners} className="text-silver hover:text-navy cursor-grab active:cursor-grabbing p-0.5 self-start touch-none" aria-label="اسحب">
+      <button {...attributes} {...listeners} className="text-silver hover:text-navy cursor-grab active:cursor-grabbing h-9 w-9 -ms-2 -mt-1.5 grid place-items-center rounded-md self-start touch-none" aria-label="اسحب لإعادة الترتيب">
         <GripVertical size={16} />
       </button>
       <div className="min-w-0 flex-1">
@@ -208,10 +208,10 @@ function PlanCard({ item, onEdit, onDelete }: { item: PlanItem; onEdit: () => vo
         )}
       </div>
       <div className="reveal flex flex-col gap-0.5">
-        <button onClick={onEdit} className="p-1.5 rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
+        <button onClick={onEdit} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
           <Pencil size={14} />
         </button>
-        <button onClick={onDelete} className="p-1.5 rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+        <button onClick={onDelete} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
           <Trash2 size={14} />
         </button>
       </div>

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
+import { Modal, Field } from "@/components/ui";
 import { ROLE_LABELS, type Profile, type StaffRole } from "@/lib/types";
 
 const ROLES = Object.keys(ROLE_LABELS) as StaffRole[];
@@ -14,6 +15,10 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pwFor, setPwFor] = useState<Profile | null>(null);
+  const [pwValue, setPwValue] = useState("");
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
 
   // create form
   const [fullName, setFullName] = useState("");
@@ -66,17 +71,33 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
     if (error) reload();
   }
 
-  async function resetPassword(p: Profile) {
-    const pw = window.prompt(`كلمة مرور جديدة لـ ${p.full_name} (8 أحرف على الأقل):`);
-    if (!pw) return;
-    const { error } = await supabase.rpc("admin_set_password", { p_user_id: p.id, p_password: pw });
-    alert(error ? "تعذر تغيير كلمة المرور" : "تم تغيير كلمة المرور");
+  function openReset(p: Profile) {
+    setPwValue("");
+    setPwMsg(null);
+    setPwFor(p);
+  }
+
+  async function submitReset(e: FormEvent) {
+    e.preventDefault();
+    if (!pwFor) return;
+    if (pwValue.length < 8) return setPwMsg({ ok: false, text: "كلمة المرور 8 أحرف على الأقل" });
+    setBusy(true);
+    const { error } = await supabase.rpc("admin_set_password", { p_user_id: pwFor.id, p_password: pwValue });
+    setBusy(false);
+    if (error) return setPwMsg({ ok: false, text: "تعذر تغيير كلمة المرور" });
+    setPwFor(null);
+    showFlash(`تم تغيير كلمة مرور ${pwFor.full_name}`);
+  }
+
+  function showFlash(text: string) {
+    setFlash(text);
+    setTimeout(() => setFlash(null), 3000);
   }
 
   async function remove(p: Profile) {
-    if (!window.confirm(`حذف حساب ${p.full_name} نهائياً؟`)) return;
+    if (!window.confirm(`حذف حساب ${p.full_name} نهائياً؟ ما يقدر يدخل بعدها.`)) return;
     const { error } = await supabase.rpc("admin_delete_user", { p_user_id: p.id });
-    if (error) alert("تعذر الحذف");
+    showFlash(error ? "تعذر الحذف" : `تم حذف حساب ${p.full_name}`);
     reload();
   }
 
@@ -168,7 +189,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
                       <button
                         onClick={() => patch(p.id, { marketing_access: !p.marketing_access })}
                         className={clsx(
-                          "inline-grid h-8 w-8 place-items-center rounded-full border transition",
+                          "inline-grid h-10 w-10 place-items-center rounded-full border transition",
                           p.marketing_access ? "bg-ice text-navy-900 border-ice" : "bg-white text-silver border-silver-200 hover:border-ice",
                         )}
                         title="صلاحية مركز التسويق"
@@ -181,22 +202,23 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
                     <button
                       disabled={me}
                       onClick={() => patch(p.id, { is_active: !p.is_active })}
-                      className={clsx("chip", p.is_active ? "bg-ice-100 text-navy" : "bg-silver-200 text-ink-2")}
+                      className={clsx("chip h-9 px-3", p.is_active ? "bg-ice-100 text-navy" : "bg-silver-200 text-ink-2")}
+                      title={me ? "" : p.is_active ? "اضغط لإيقاف الحساب" : "اضغط لتفعيل الحساب"}
                     >
                       {p.is_active ? "نشط" : "موقّف"}
                     </button>
                   </td>
                   <td className="px-2 py-3">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => resetPassword(p)} className="p-2 rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" title="تغيير كلمة المرور">
+                      <button onClick={() => openReset(p)} className="h-10 w-10 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" title="تغيير كلمة المرور" aria-label="تغيير كلمة المرور">
                         <KeyRound size={17} />
                       </button>
                       {!me && (
-                        <button onClick={() => remove(p)} className="p-2 rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" title="حذف">
+                        <button onClick={() => remove(p)} className="h-10 w-10 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" title="حذف" aria-label="حذف">
                           <Trash2 size={17} />
                         </button>
                       )}
-                      {me && <span className="p-2 text-silver"><Ban size={17} /></span>}
+                      {me && <span className="h-10 w-10 grid place-items-center text-silver"><Ban size={17} /></span>}
                     </div>
                   </td>
                 </tr>
@@ -205,6 +227,31 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
           </tbody>
         </table>
       </div>
+
+      {flash && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-navy text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{flash}</div>}
+
+      <Modal
+        open={!!pwFor}
+        onClose={() => setPwFor(null)}
+        title={pwFor ? `كلمة مرور جديدة — ${pwFor.full_name}` : ""}
+        footer={
+          <>
+            <button type="button" className="btn-ghost" onClick={() => setPwFor(null)}>
+              إلغاء
+            </button>
+            <button form="pw-form" className="btn-primary" disabled={busy}>
+              تغيير
+            </button>
+          </>
+        }
+      >
+        <form id="pw-form" onSubmit={submitReset} className="flex flex-col gap-3">
+          <Field label="كلمة المرور المؤقتة (أرسلها للموظف وهو يغيّرها من الإعدادات)">
+            <input className="field en" dir="ltr" autoComplete="new-password" value={pwValue} onChange={(e) => setPwValue(e.target.value)} minLength={8} required />
+          </Field>
+          {pwMsg && <p className={`text-sm font-bold ${pwMsg.ok ? "text-ice-600" : "text-error"}`}>{pwMsg.text}</p>}
+        </form>
+      </Modal>
     </div>
   );
 }

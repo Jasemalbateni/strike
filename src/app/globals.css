@@ -218,7 +218,9 @@ textarea {
   }
 }
 .fade-up {
-  animation: fade-up 0.25s ease-out both;
+  /* "backwards" (not "both"): a retained transform would turn this element into the containing
+     block for position:fixed children (drag overlays, modals) and offset them */
+  animation: fade-up 0.25s ease-out backwards;
 }
 
 @keyframes pulse-dot {

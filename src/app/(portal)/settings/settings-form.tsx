@@ -21,7 +21,11 @@ export default function SettingsForm({ fullName, username }: { fullName: string;
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const { error } = await supabase.from("profiles").update({ full_name: name.trim() }).eq("id", user!.id);
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    const { error } = await supabase.from("profiles").update({ full_name: name.trim() }).eq("id", user.id);
     setBusy(false);
     setNameMsg(error ? "تعذر الحفظ" : "تم الحفظ");
     if (!error) router.refresh();

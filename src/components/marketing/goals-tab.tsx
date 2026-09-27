@@ -95,7 +95,7 @@ export default function GoalsTab() {
           }
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext id="goals-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={goals.map((g) => g.id)} strategy={rectSortingStrategy}>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {goals.map((g) => (
@@ -194,16 +194,16 @@ function GoalCard({ goal, onEdit, onDelete, onQuick }: { goal: Goal; onEdit: () 
       className={clsx("card p-4 flex flex-col gap-3 group", isDragging && "dragging z-10")}
     >
       <div className="flex items-center gap-2">
-        <button {...attributes} {...listeners} className="text-silver hover:text-navy cursor-grab active:cursor-grabbing -ms-1 p-0.5 touch-none" aria-label="اسحب لإعادة الترتيب">
+        <button {...attributes} {...listeners} className="text-silver hover:text-navy cursor-grab active:cursor-grabbing -ms-2.5 h-9 w-9 grid place-items-center rounded-md touch-none" aria-label="اسحب لإعادة الترتيب">
           <GripVertical size={16} />
         </button>
         <PlatformChip platform={goal.platform} full />
         <span className="text-ink-2 text-xs font-bold">{metricLabel(goal.metric)}</span>
         <div className="reveal ms-auto flex gap-0.5">
-          <button onClick={onEdit} className="p-1.5 rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
+          <button onClick={onEdit} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" aria-label="تعديل">
             <Pencil size={15} />
           </button>
-          <button onClick={() => confirm("حذف الهدف؟") && onDelete()} className="p-1.5 rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+          <button onClick={() => confirm("حذف الهدف؟") && onDelete()} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
             <Trash2 size={15} />
           </button>
         </div>
@@ -226,7 +226,8 @@ function GoalCard({ goal, onEdit, onDelete, onQuick }: { goal: Goal; onEdit: () 
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             onBlur={() => {
-              onQuick(Number(quick) || 0);
+              const v = Number(quick) || 0;
+              if (v !== goal.current_value) onQuick(v);
               setQuick(null);
             }}
             onKeyDown={(e) => {

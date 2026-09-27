@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import clsx from "clsx";
 import { PLATFORMS, platformLabel, platformShort, statusLabel, type Platform, type PostStatus } from "@/lib/types";
 
 /* ---------- Modal ---------- */
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function Modal({
   open,
   onClose,
@@ -22,34 +24,80 @@ export function Modal({
   footer?: ReactNode;
   wide?: boolean;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    // focus the first field (or the panel) so keyboard users land inside the dialog
+    const first = panel?.querySelector<HTMLElement>('input:not([type="hidden"]),textarea,select') ?? panel?.querySelector<HTMLElement>(FOCUSABLE);
+    (first ?? panel)?.focus({ preventScroll: true });
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key === "Tab" && panel) {
+        // keep Tab inside the dialog
+        const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+        if (items.length === 0) return;
+        const firstEl = items[0];
+        const lastEl = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === firstEl) {
+          e.preventDefault();
+          lastEl.focus();
+        } else if (!e.shiftKey && document.activeElement === lastEl) {
+          e.preventDefault();
+          firstEl.focus();
+        }
+      }
+    };
     document.addEventListener("keydown", onKey);
+    // lock background scroll (works on iOS too, unlike overflow:hidden alone)
+    const scrollY = window.scrollY;
+    const { position, top, width, overflow } = document.body.style;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.position = position;
+      document.body.style.top = top;
+      document.body.style.width = width;
+      document.body.style.overflow = overflow;
+      window.scrollTo(0, scrollY);
+      previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, [open, onClose]);
+
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6" role="dialog" aria-modal>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
       <div className="absolute inset-0 bg-navy-900/55 backdrop-blur-[2px]" onClick={onClose} />
       <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className={clsx(
-          "relative w-full bg-white rounded-t-3xl sm:rounded-3xl shadow-[var(--shadow-pop)] max-h-[92dvh] flex flex-col fade-up",
+          "relative w-full bg-white rounded-t-3xl sm:rounded-3xl shadow-[var(--shadow-pop)] max-h-[92dvh] flex flex-col fade-up outline-none",
           wide ? "sm:max-w-3xl" : "sm:max-w-xl",
         )}
       >
-        <div className="flex items-center justify-between px-5 sm:px-6 pt-5 pb-3">
-          <h2 className="text-navy font-extrabold text-[19px]">{title}</h2>
-          <button onClick={onClose} className="p-2 -me-2 rounded-lg text-ink-2 hover:bg-silver-100 hover:text-navy" aria-label="إغلاق">
+        <div className="flex items-center justify-between px-5 sm:px-6 pt-4 pb-2">
+          <h2 id={titleId} className="text-navy font-extrabold text-[19px]">{title}</h2>
+          <button onClick={onClose} className="h-11 w-11 -me-3 grid place-items-center rounded-lg text-ink-2 hover:bg-silver-100 hover:text-navy" aria-label="إغلاق">
             <X size={20} />
           </button>
         </div>
-        <div className="px-5 sm:px-6 pb-4 overflow-y-auto flex-1">{children}</div>
-        {footer && <div className="px-5 sm:px-6 py-4 border-t border-silver-200 flex items-center justify-between gap-3 bg-silver-100/60 rounded-b-3xl">{footer}</div>}
+        <div className="px-5 sm:px-6 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 overflow-y-auto flex-1 overscroll-contain">{children}</div>
+        {footer && <div className="px-5 sm:px-6 py-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4 border-t border-silver-200 flex items-center justify-between gap-3 bg-silver-100/60 rounded-b-3xl">{footer}</div>}
       </div>
     </div>,
     document.body,

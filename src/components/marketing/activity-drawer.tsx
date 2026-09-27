@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -7,19 +8,25 @@ import { ar } from "date-fns/locale";
 import { useHub } from "./store";
 import { Avatar } from "@/components/ui";
 
-const ACTION: Record<string, string> = { created: "أضاف", updated: "عدّل", deleted: "حذف", moved: "نقل" };
+const ACTION: Record<string, string> = { created: "أضاف", updated: "عدّل", deleted: "حذف", moved: "نقل", archived: "أرشف" };
 const ENTITY: Record<string, string> = { goal: "هدف", plan: "عنصر خطة", idea: "فكرة", post: "منشور", metric: "أرقام" };
 
 export default function ActivityDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data } = useHub();
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open || typeof document === "undefined") return null;
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-navy-900/40" onClick={onClose} />
-      <aside className="absolute inset-y-0 start-0 w-full max-w-sm bg-white shadow-[var(--shadow-pop)] flex flex-col fade-up">
+      <aside role="dialog" aria-modal="true" aria-label="سجل النشاط" className="absolute inset-y-0 start-0 w-full max-w-sm bg-white shadow-[var(--shadow-pop)] flex flex-col fade-up">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-silver-200">
           <h2 className="text-navy font-extrabold text-[18px]">سجل النشاط</h2>
-          <button onClick={onClose} className="p-2 -me-2 rounded-lg text-ink-2 hover:bg-silver-100" aria-label="إغلاق">
+          <button onClick={onClose} className="h-11 w-11 -me-3 grid place-items-center rounded-lg text-ink-2 hover:bg-silver-100" aria-label="إغلاق">
             <X size={20} />
           </button>
         </div>
