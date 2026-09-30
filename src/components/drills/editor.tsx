@@ -119,7 +119,10 @@ type Props = {
 };
 
 export default function Editor({ initial, readOnly = false, onChange, onSave, title, actions, banner, info, exportTitle, exportSubtitle, ref }: Props) {
-  const wide = useMediaQuery("(min-width: 1024px)");
+  // wide = side panels (desktop, landscape tablets); portrait tablets and phones get the dock layout
+  const wide = useMediaQuery("(min-width: 1024px) and (orientation: landscape)");
+  // roomy = enough width for two side columns; otherwise one inspector column swaps its content
+  const roomy = useMediaQuery("(min-width: 1360px)");
   const coarse = useMediaQuery("(pointer: coarse)");
 
   /* ---------------- state ---------------- */
@@ -147,6 +150,7 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const [playEls, setPlayEls] = useState<El[] | null>(null);
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  const [pitchOpen, setPitchOpen] = useState(false);
   const [hs, setHs] = useState({ u: 0, r: 0 });
   const [toast, setToast] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -486,7 +490,8 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
     const b = boardRef.current;
     const el = item.kind === "token" ? makeToken(item.team, p, curEls()) : makeArt(item.key, p, b.pitch);
     commit(mapEls(b, (l) => [...l, el]));
-    setSelection([el.id]);
+    // with a single inspector column, selecting would swap the palette out after every add
+    if (!wide || roomy) setSelection([el.id]);
     if (toolRef.current !== "select") setTool("select");
   }
   function ghostSize(item: PaletteItem) {
@@ -1412,7 +1417,34 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
     />
   );
 
-  /* ---------- desktop / large tablet ---------- */
+  const toolPanel =
+    tool === "line" || tool === "pen" ? (
+      <>
+        <PanelHead>{tool === "pen" ? "رسم حر" : "الخطوط والأسهم"}</PanelHead>
+        <LineOptions style={lineStyle} onChange={changeLineStyle} />
+        <Hint>{tool === "pen" ? "ارسم بحرية بإصبعك أو الماوس." : "اسحب على الملعب لرسم خط. ابدأ من اللاعب ليلتصق به. Shift للزوايا الثابتة."}</Hint>
+      </>
+    ) : tool === "shape" ? (
+      <>
+        <PanelHead>الأشكال والمناطق</PanelHead>
+        <ShapeOptions kind={shapeKind} style={shapeStyle} onKind={changeShapeKind} onChange={changeShapeStyle} />
+        <Hint>اسحب لرسم الشكل، أو اضغط مرة لإضافة شكل جاهز. Shift لمربع/دائرة متساوية.</Hint>
+      </>
+    ) : (
+      <>
+        <PanelHead>اللاعبون</PanelHead>
+        <div className="px-3.5 pb-3">
+          <PlayersGrid onItemDown={onItemDown} />
+        </div>
+        <PanelHead>الأدوات</PanelHead>
+        <div className="px-3.5 pb-3">
+          <EquipmentGrid onItemDown={onItemDown} />
+        </div>
+        <Hint>اسحب العنصر إلى الملعب أو اضغطه لإضافته في الوسط. لحذفه اسحبه خارج الملعب.</Hint>
+      </>
+    );
+
+  /* ---------- desktop / landscape tablet ---------- */
   if (wide) {
     return (
       <div className="studio fixed inset-0 z-40 flex flex-col bg-[#0b1429] text-white">
@@ -1445,7 +1477,15 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
             <>
               <nav className="w-[60px] shrink-0 bg-navy border-l border-white/[0.07] flex flex-col items-center gap-1 py-3" aria-label="الأدوات">
                 {toolsList.map((x) => (
-                  <ToolButton key={x.t} active={tool === x.t} title={`${x.label} (${x.key})`} onClick={() => setTool(x.t)}>
+                  <ToolButton
+                    key={x.t}
+                    active={tool === x.t && !(pitchOpen && !roomy && !showProps)}
+                    title={`${x.label} (${x.key})`}
+                    onClick={() => {
+                      setTool(x.t);
+                      setPitchOpen(false);
+                    }}
+                  >
                     {x.icon}
                   </ToolButton>
                 ))}
@@ -1453,45 +1493,53 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
                 <ToolButton active={multi} title="تحديد متعدد باللمس" onClick={() => setMulti(!multi)}>
                   <SquareDashedMousePointer size={19} />
                 </ToolButton>
+                {!roomy && (
+                  <ToolButton
+                    active={pitchOpen && !showProps}
+                    title="إعدادات اللوحة (نوع الملعب والألوان)"
+                    onClick={() => {
+                      if (showProps) {
+                        setSelection([]);
+                        setPitchOpen(true);
+                      } else setPitchOpen(!pitchOpen);
+                    }}
+                  >
+                    <Settings2 size={19} />
+                  </ToolButton>
+                )}
               </nav>
-              <aside className="w-[244px] shrink-0 bg-navy/60 border-l border-white/[0.07] overflow-y-auto studio-scroll">
-                {tool === "line" || tool === "pen" ? (
+              <aside className={clsx("shrink-0 bg-navy/60 border-l border-white/[0.07] overflow-y-auto studio-scroll", roomy ? "w-[244px]" : "w-[272px]")}>
+                {roomy ? (
+                  toolPanel
+                ) : showProps ? (
+                  selectionPanel
+                ) : pitchOpen ? (
                   <>
-                    <PanelHead>{tool === "pen" ? "رسم حر" : "الخطوط والأسهم"}</PanelHead>
-                    <LineOptions style={lineStyle} onChange={changeLineStyle} />
-                    <Hint>{tool === "pen" ? "ارسم بحرية بإصبعك أو الماوس." : "اسحب على الملعب لرسم خط. ابدأ من اللاعب ليلتصق به. Shift للزوايا الثابتة."}</Hint>
-                  </>
-                ) : tool === "shape" ? (
-                  <>
-                    <PanelHead>الأشكال والمناطق</PanelHead>
-                    <ShapeOptions kind={shapeKind} style={shapeStyle} onKind={changeShapeKind} onChange={changeShapeStyle} />
-                    <Hint>اسحب لرسم الشكل، أو اضغط مرة لإضافة شكل جاهز. Shift لمربع/دائرة متساوية.</Hint>
+                    <div className="flex items-center justify-between pe-2">
+                      <PanelHead>إعدادات اللوحة</PanelHead>
+                      <button type="button" onClick={() => setPitchOpen(false)} className="mt-2 text-silver hover:text-white h-8 w-8 grid place-items-center rounded-lg" aria-label="إغلاق إعدادات اللوحة">
+                        <X size={16} />
+                      </button>
+                    </div>
+                    {pitchPanel}
                   </>
                 ) : (
-                  <>
-                    <PanelHead>اللاعبون</PanelHead>
-                    <div className="px-3.5 pb-3">
-                      <PlayersGrid onItemDown={onItemDown} />
-                    </div>
-                    <PanelHead>الأدوات</PanelHead>
-                    <div className="px-3.5 pb-3">
-                      <EquipmentGrid onItemDown={onItemDown} />
-                    </div>
-                    <Hint>اسحب العنصر إلى الملعب أو اضغطه لإضافته في الوسط. لحذفه اسحبه خارج الملعب.</Hint>
-                  </>
+                  toolPanel
                 )}
               </aside>
             </>
           )}
           {boardArea}
-          <aside className="w-[284px] shrink-0 bg-navy border-r border-white/[0.07] overflow-y-auto studio-scroll">
-            {readOnly ? info : showProps ? selectionPanel : (
-              <>
-                <PanelHead>إعدادات اللوحة</PanelHead>
-                {pitchPanel}
-              </>
-            )}
-          </aside>
+          {(roomy || readOnly) && (
+            <aside className="w-[284px] shrink-0 bg-navy border-r border-white/[0.07] overflow-y-auto studio-scroll">
+              {readOnly ? info : showProps ? selectionPanel : (
+                <>
+                  <PanelHead>إعدادات اللوحة</PanelHead>
+                  {pitchPanel}
+                </>
+              )}
+            </aside>
+          )}
         </div>
         {ghost && <GhostView ghost={ghost} size={ghostSize(ghost.item)} />}
         {exported && (
@@ -1543,16 +1591,19 @@ export default function Editor({ initial, readOnly = false, onChange, onSave, ti
   else if (sheet === "props") sheetBody = selectionPanel;
   else if (sheet === "more")
     sheetBody = (
-      <div className="p-3 grid grid-cols-4 gap-2">
-        <MoreBtn icon={<Type size={20} />} label="نص" active={tool === "text"} onClick={() => { setTool("text"); setSheet(null); flash("اضغط على الملعب لإضافة نص"); }} />
-        <MoreBtn icon={<PenLine size={20} />} label="رسم حر" active={tool === "pen"} onClick={() => { setTool("pen"); setSheet(null); }} />
-        <MoreBtn icon={<SquareDashedMousePointer size={20} />} label="تحديد متعدد" active={multi} onClick={() => { setTool("select"); setMulti(!multi); setSheet(null); }} />
-        <MoreBtn icon={<Settings2 size={20} />} label="الملعب" onClick={() => setSheet("board")} />
-        <MoreBtn icon={<Layers size={20} />} label="مرحلة جديدة" onClick={() => { addFrame(); setSheet(null); }} />
-        <MoreBtn icon={<CopyPlus size={20} />} label="نسخ المرحلة" onClick={() => { duplicateFrame(); setSheet(null); }} />
-        <MoreBtn icon={<ImageDown size={20} />} label="صورة" onClick={() => { setSheet(null); exportImage(); }} />
-        <MoreBtn icon={<Hand size={20} />} label="تحريك اللوحة" active={tool === "hand"} onClick={() => { setTool(tool === "hand" ? "select" : "hand"); setSheet(null); }} />
-      </div>
+      <>
+        <div className="px-3.5 pt-3.5 text-[11.5px] font-bold text-silver/80">المزيد</div>
+        <div className="p-3 grid grid-cols-4 gap-2">
+          <MoreBtn icon={<Type size={20} />} label="نص" active={tool === "text"} onClick={() => { setTool("text"); setSheet(null); flash("اضغط على الملعب لإضافة نص"); }} />
+          <MoreBtn icon={<PenLine size={20} />} label="رسم حر" active={tool === "pen"} onClick={() => { setTool("pen"); setSheet(null); }} />
+          <MoreBtn icon={<SquareDashedMousePointer size={20} />} label="تحديد متعدد" active={multi} onClick={() => { setTool("select"); setMulti(!multi); setSheet(null); }} />
+          <MoreBtn icon={<Settings2 size={20} />} label="الملعب" onClick={() => setSheet("board")} />
+          <MoreBtn icon={<Layers size={20} />} label="مرحلة جديدة" onClick={() => { addFrame(); setSheet(null); }} />
+          <MoreBtn icon={<CopyPlus size={20} />} label="نسخ المرحلة" onClick={() => { duplicateFrame(); setSheet(null); }} />
+          <MoreBtn icon={<ImageDown size={20} />} label="صورة" onClick={() => { setSheet(null); exportImage(); }} />
+          <MoreBtn icon={<Hand size={20} />} label="تحريك اللوحة" active={tool === "hand"} onClick={() => { setTool(tool === "hand" ? "select" : "hand"); setSheet(null); }} />
+        </div>
+      </>
     );
 
   const toolStrip =

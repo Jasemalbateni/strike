@@ -105,10 +105,8 @@ button,
   color: var(--navy);
 }
 
-input,
-textarea,
-select,
-button {
+/* controls inherit the page font; inside the drill studio they are sized by their own utility classes */
+:where(input, textarea, select, button):not(.studio *) {
   font: inherit;
 }
 
