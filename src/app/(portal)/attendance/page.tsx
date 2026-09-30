@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { canManagePlayers, getProfile, todayKW } from "@/lib/auth";
+import { canManagePlayers, canManageSessions, getProfile, requireAccess, todayKW } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import AttendanceBoard from "./attendance-board";
 import type { Attendance, Branch, Group, Player, Session, Subscription } from "@/lib/players";
@@ -8,6 +8,7 @@ export const metadata: Metadata = { title: "الحضور" };
 
 export default async function AttendancePage() {
   const me = await getProfile();
+  requireAccess(me, "attendance");
   const supabase = await createClient();
   const canManage = canManagePlayers(me);
 
@@ -28,7 +29,7 @@ export default async function AttendancePage() {
 
   return (
     <AttendanceBoard
-      me={{ id: me.id, name: me.full_name, canManage }}
+      me={{ id: me.id, name: me.full_name, canManage, canCancel: canManageSessions(me) }}
       today={todayKW()}
       branches={(branches.data ?? []) as Branch[]}
       groups={(groups.data ?? []) as Group[]}

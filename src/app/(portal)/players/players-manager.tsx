@@ -24,6 +24,7 @@ import {
   type SubState,
   type Subscription,
 } from "@/lib/players";
+import { bidi } from "@/lib/bidi";
 
 type Props = {
   me: { id: string; isOwner: boolean };
@@ -354,7 +355,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
             .filter((g) => !branchId || g.branch_id === branchId)
             .map((g) => (
               <button key={g.id} onClick={() => setGroupId(groupId === g.id ? null : g.id)} className={clsx("chip px-3 h-9 text-[13px] shrink-0 whitespace-nowrap", groupId === g.id ? "bg-ice text-navy-900" : "bg-white border border-silver-200 text-navy")}>
-                {g.name}
+                {bidi(g.name)}
               </button>
             ))}
         </div>
@@ -368,7 +369,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
           {/* phones: cards */}
           <div className="grid gap-2 md:hidden">
             {visible.map((r) => (
-              <PlayerCard key={r.p.id} r={r} group={groupOf(r.p.group_id)?.name} onOpen={() => setDetailId(r.p.id)} onRenew={() => setSubForm({ player: r.p, convert: r.p.kind === "trial" })} />
+              <PlayerCard key={r.p.id} r={r} group={bidi(groupOf(r.p.group_id)?.name)} onOpen={() => setDetailId(r.p.id)} onRenew={() => setSubForm({ player: r.p, convert: r.p.kind === "trial" })} />
             ))}
           </div>
           {/* tablets / laptops: table */}
@@ -398,7 +399,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-navy font-bold whitespace-nowrap">{groupOf(r.p.group_id)?.name ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-navy font-bold whitespace-nowrap">{bidi(groupOf(r.p.group_id)?.name) ?? "—"}</td>
                       <td className="px-3 py-2.5">
                         <div className="text-navy font-bold truncate max-w-[160px]">{r.p.guardian_name || "—"}</div>
                         {r.p.guardian_phone && <PhoneLinks phone={r.p.guardian_phone} compact />}
@@ -619,7 +620,7 @@ function PlayerDetail({ r, subs, branch, group, isOwner, onClose, onEdit, onRene
       <div className="flex flex-wrap items-center gap-1.5 mb-4">
         {trial ? <span className="chip bg-gold text-navy-900">تجربة</span> : <span className={clsx("chip", STATE_CHIP[r.st.state])}>{SUB_LABEL[r.st.state]}</span>}
         {p.archived && <span className="chip bg-silver-200 text-navy-900">مؤرشف</span>}
-        {group && <span className="chip bg-navy-50 text-navy">{group.name}</span>}
+        {group && <span className="chip bg-navy-50 text-navy">{bidi(group.name)}</span>}
         {branch && <span className="chip bg-silver-100 text-ink-2">{branch.name}</span>}
         {p.age && <span className="chip bg-silver-100 text-ink-2 num">{p.age} سنوات</span>}
       </div>
@@ -777,7 +778,7 @@ function PlayerFormModal({ player, branches, groups, today, onClose, onSaved, on
             <option value="">بدون فئة</option>
             {branchGroups.map((g) => (
               <option key={g.id} value={g.id}>
-                {g.name}
+                {bidi(g.name)}
               </option>
             ))}
           </select>

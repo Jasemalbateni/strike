@@ -13,12 +13,30 @@ export const ROLE_LABELS: Record<StaffRole, string> = {
   coach: "مدرب",
 };
 
+/** pages a staff member can open (owners always see everything) — mirrors profiles.access */
+export type PageKey = "attendance" | "players" | "drills" | "calendar";
+
+export const PAGE_LABELS: Record<PageKey, string> = {
+  attendance: "الحضور",
+  players: "اللاعبين",
+  drills: "رسم التمارين",
+  calendar: "التقويم",
+};
+
+export const DEFAULT_ACCESS: Record<StaffRole, PageKey[]> = {
+  owner: ["attendance", "players", "drills", "calendar"],
+  branch_manager: ["attendance", "players", "drills", "calendar"],
+  admin: ["attendance", "players", "calendar"],
+  coach: ["attendance", "drills", "calendar"],
+};
+
 export type Profile = {
   id: string;
   username: string;
   full_name: string;
   role: StaffRole;
   marketing_access: boolean;
+  access: PageKey[];
   is_active: boolean;
   mentions_seen_at?: string;
   created_at: string;

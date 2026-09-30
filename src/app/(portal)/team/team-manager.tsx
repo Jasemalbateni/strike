@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X } from "lucide-react";
+import { Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X, ClipboardCheck, IdCard, PenTool, CalendarDays } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
 
-import { ROLE_LABELS, type Profile, type StaffRole } from "@/lib/types";
+import { DEFAULT_ACCESS, PAGE_LABELS, ROLE_LABELS, type PageKey, type Profile, type StaffRole } from "@/lib/types";
+
+const PAGES: { key: PageKey; icon: React.ReactNode }[] = [
+  { key: "attendance", icon: <ClipboardCheck size={15} /> },
+  { key: "players", icon: <IdCard size={15} /> },
+  { key: "drills", icon: <PenTool size={15} /> },
+  { key: "calendar", icon: <CalendarDays size={15} /> },
+];
 
 const ROLES = Object.keys(ROLE_LABELS) as StaffRole[];
 
@@ -29,6 +36,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<StaffRole>("coach");
   const [mk, setMk] = useState(false);
+  const [access, setAccess] = useState<PageKey[]>(DEFAULT_ACCESS.coach);
 
   async function reload() {
     const { data } = await supabase.from("profiles").select("*").order("created_at");
@@ -45,6 +53,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
       p_full_name: fullName.trim(),
       p_role: role,
       p_marketing_access: mk,
+      p_access: access,
     });
     setBusy(false);
     if (error) {
@@ -64,6 +73,7 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
     setPassword("");
     setRole("coach");
     setMk(false);
+    setAccess(DEFAULT_ACCESS.coach);
     setOpen(false);
     reload();
   }
@@ -132,7 +142,16 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-bold text-navy">الدور</span>
-            <select className="field" value={role} onChange={(e) => setRole(e.target.value as StaffRole)}>
+            <select
+              className="field"
+              value={role}
+              onChange={(e) => {
+                const r = e.target.value as StaffRole;
+                setRole(r);
+                setAccess(DEFAULT_ACCESS[r]);
+                if (r === "owner") setMk(true);
+              }}
+            >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABELS[r]}
@@ -146,6 +165,12 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
               <Megaphone size={16} className="text-ice" /> صلاحية مركز التسويق
             </span>
           </label>
+          <div className="sm:col-span-2">
+            <span className="text-sm font-bold text-navy">الصفحات اللي تظهر له</span>
+            <div className="mt-1.5">
+              <AccessChips value={role === "owner" ? DEFAULT_ACCESS.owner : access} disabled={role === "owner"} onToggle={(k) => setAccess((a) => (a.includes(k) ? a.filter((x) => x !== k) : [...a, k]))} />
+            </div>
+          </div>
           {err && <p className="sm:col-span-2 rounded-xl bg-error-100 text-error text-sm font-bold px-3.5 py-2.5">{err}</p>}
           <div className="sm:col-span-2 flex justify-end">
             <button className="btn-primary" disabled={busy}>
@@ -155,80 +180,75 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
         </form>
       )}
 
-      <div className="card overflow-hidden">
-        <table className="w-full text-[15px]">
-          <thead className="bg-navy text-white text-sm">
-            <tr>
-              <th className="text-start px-4 py-3 font-bold">الاسم</th>
-              <th className="text-start px-4 py-3 font-bold hidden sm:table-cell">الدور</th>
-              <th className="text-center px-4 py-3 font-bold">التسويق</th>
-              <th className="text-center px-4 py-3 font-bold">الحالة</th>
-              <th className="px-2 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((p, i) => {
-              const me = p.id === meId;
-              return (
-                <tr key={p.id} className={clsx(i % 2 ? "bg-silver-100/70" : "bg-white", !p.is_active && "opacity-60")}>
-                  <td className="px-4 py-3">
-                    <div className="font-bold text-navy">
-                      {p.full_name} {me && <span className="chip bg-ice-100 text-navy ms-1">أنت</span>}
-                    </div>
-                    <div className="en text-ink-2 text-xs" dir="ltr">
-                      @{p.username}
-                    </div>
-                    <div className="sm:hidden mt-1">
-                      <RoleSelect p={p} disabled={me} onChange={(role) => patch(p.id, { role })} />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <RoleSelect p={p} disabled={me} onChange={(role) => patch(p.id, { role })} />
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {p.role === "owner" ? (
-                      <ShieldCheck size={18} className="inline text-gold" />
-                    ) : (
-                      <button
-                        onClick={() => patch(p.id, { marketing_access: !p.marketing_access })}
-                        className={clsx(
-                          "inline-grid h-10 w-10 place-items-center rounded-full border transition",
-                          p.marketing_access ? "bg-ice text-navy-900 border-ice" : "bg-white text-silver border-silver-200 hover:border-ice",
-                        )}
-                        title="صلاحية مركز التسويق"
-                      >
-                        {p.marketing_access ? <Check size={16} /> : <Megaphone size={15} />}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      disabled={me}
-                      onClick={() => patch(p.id, { is_active: !p.is_active })}
-                      className={clsx("chip h-9 px-3", p.is_active ? "bg-ice-100 text-navy" : "bg-silver-200 text-ink-2")}
-                      title={me ? "" : p.is_active ? "اضغط لإيقاف الحساب" : "اضغط لتفعيل الحساب"}
-                    >
-                      {p.is_active ? "نشط" : "موقّف"}
+      <div className="grid gap-3">
+        {rows.map((p) => {
+          const me = p.id === meId;
+          const owner = p.role === "owner";
+          return (
+            <div key={p.id} className={clsx("card p-4", !p.is_active && "opacity-60")}>
+              <div className="flex items-center gap-x-3 gap-y-2.5 flex-wrap">
+                <div className="min-w-0 flex-1 order-1">
+                  <div className="font-bold text-navy text-[16px] truncate">
+                    {p.full_name} {me && <span className="chip bg-ice-100 text-navy ms-1">أنت</span>}
+                  </div>
+                  <div className="en text-ink-2 text-xs text-right" dir="ltr">
+                    @{p.username}
+                  </div>
+                </div>
+                <div className="order-3 sm:order-2 w-full sm:w-auto flex items-center gap-2">
+                  <RoleSelect p={p} disabled={me} onChange={(role) => patch(p.id, { role, ...(role === "owner" ? { marketing_access: true } : {}) })} />
+                  <button
+                    disabled={me}
+                    onClick={() => patch(p.id, { is_active: !p.is_active })}
+                    className={clsx("chip h-9 px-3 shrink-0", p.is_active ? "bg-ice-100 text-navy" : "bg-silver-200 text-ink-2")}
+                    title={me ? "" : p.is_active ? "اضغط لإيقاف الحساب" : "اضغط لتفعيل الحساب"}
+                  >
+                    {p.is_active ? "نشط" : "موقّف"}
+                  </button>
+                </div>
+                <div className="order-2 sm:order-3 flex gap-1">
+                  <button onClick={() => openReset(p)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" title="تغيير كلمة المرور" aria-label="تغيير كلمة المرور">
+                    <KeyRound size={17} />
+                  </button>
+                  {!me ? (
+                    <button onClick={() => remove(p)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" title="حذف" aria-label="حذف">
+                      <Trash2 size={17} />
                     </button>
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => openReset(p)} className="h-10 w-10 grid place-items-center rounded-lg text-ink-2 hover:bg-navy-50 hover:text-navy" title="تغيير كلمة المرور" aria-label="تغيير كلمة المرور">
-                        <KeyRound size={17} />
-                      </button>
-                      {!me && (
-                        <button onClick={() => remove(p)} className="h-10 w-10 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" title="حذف" aria-label="حذف">
-                          <Trash2 size={17} />
-                        </button>
-                      )}
-                      {me && <span className="h-10 w-10 grid place-items-center text-silver"><Ban size={17} /></span>}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  ) : (
+                    <span className="h-9 w-9 grid place-items-center text-silver">
+                      <Ban size={17} />
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-silver-200 flex items-center gap-2 flex-wrap">
+                <span className="text-[12px] font-bold text-ink-2 me-1">الصفحات:</span>
+                {owner ? (
+                  <span className="chip bg-gold-100 text-navy-900 h-8 px-3">
+                    <ShieldCheck size={14} /> كل الصفحات (مالك)
+                  </span>
+                ) : (
+                  <>
+                    <AccessChips
+                      value={p.access ?? []}
+                      onToggle={(k) => {
+                        const cur = p.access ?? [];
+                        patch(p.id, { access: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] });
+                      }}
+                    />
+                    <button
+                      onClick={() => patch(p.id, { marketing_access: !p.marketing_access })}
+                      className={clsx("chip h-8 px-3 gap-1.5 border", p.marketing_access ? "bg-navy text-white border-navy" : "bg-white text-ink-2 border-silver-200 hover:border-ice")}
+                      aria-pressed={p.marketing_access}
+                    >
+                      {p.marketing_access ? <Check size={14} /> : <Megaphone size={14} />} مركز التسويق
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {flash && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-navy text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{flash}</div>}
@@ -259,10 +279,32 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
   );
 }
 
+function AccessChips({ value, onToggle, disabled }: { value: PageKey[]; onToggle: (k: PageKey) => void; disabled?: boolean }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {PAGES.map(({ key, icon }) => {
+        const on = value.includes(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={disabled}
+            onClick={() => onToggle(key)}
+            aria-pressed={on}
+            className={clsx("chip h-8 px-3 gap-1.5 border transition", on ? "bg-navy text-white border-navy" : "bg-white text-ink-2 border-silver-200 hover:border-ice", disabled && "opacity-70")}
+          >
+            {on ? <Check size={14} /> : icon} {PAGE_LABELS[key]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function RoleSelect({ p, disabled, onChange }: { p: Profile; disabled: boolean; onChange: (r: StaffRole) => void }) {
   return (
     <select
-      className="rounded-lg border border-silver-200 bg-white px-2 py-1 text-sm font-bold text-navy disabled:bg-transparent disabled:border-transparent"
+      className="h-9 rounded-lg border border-silver-200 bg-white px-2 text-sm font-bold text-navy disabled:bg-transparent disabled:border-transparent"
       value={p.role}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value as StaffRole)}

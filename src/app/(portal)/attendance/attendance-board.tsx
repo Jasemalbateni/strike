@@ -10,9 +10,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
 import { DAY_SHORT, isTrainingDay, subState, trialVisibleOn, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
+import { bidi } from "@/lib/bidi";
 
 type Props = {
-  me: { id: string; name: string; canManage: boolean };
+  me: { id: string; name: string; canManage: boolean; canCancel: boolean };
   today: string;
   branches: Branch[];
   groups: Group[];
@@ -251,7 +252,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
             .filter((g) => g.branch_id === branchId)
             .map((g) => (
               <button key={g.id} onClick={() => setGroupId(groupId === g.id ? null : g.id)} className={clsx("chip px-3 h-9 text-[13px]", groupId === g.id ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
-                {g.name}
+                {bidi(g.name)}
               </button>
             ))}
         </div>
@@ -316,7 +317,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                     <span className="block font-extrabold text-navy text-[16px] leading-tight truncate">{r.p.full_name}</span>
                     <span className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       {trial && <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span>}
-                      {group && <span className="text-ink-2 text-[11px]">{group.name}</span>}
+                      {group && <span className="text-ink-2 text-[11px]">{bidi(group.name)}</span>}
                       {r.p.age && <span className="num text-ink-2 text-[11px]">{r.p.age} سنوات</span>}
                       {me.canManage && r.st.state === "expired" && <span className="chip bg-error text-white px-1.5 text-[10px]">انتهى الاشتراك</span>}
                       {me.canManage && r.st.state === "expiring" && <span className="chip bg-gold-100 text-navy-900 px-1.5 text-[10px]">ينتهي خلال {r.st.daysLeft} يوم</span>}
@@ -348,7 +349,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
             "ما تم فتح الحصة بعد — تنفتح تلقائياً مع أول علامة"
           )}
         </span>
-        {me.canManage && (
+        {me.canCancel && (
           <button onClick={cancelSession} className="btn-ghost h-8 px-2 text-xs">
             <CalendarX size={14} /> {session?.cancelled ? "إرجاع الحصة" : "إلغاء الحصة"}
           </button>

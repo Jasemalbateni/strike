@@ -242,3 +242,104 @@ textarea {
 .live-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
 }
+
+/* ---------- drill studio (tactics board) ---------- */
+.t-ar {
+  font-family: var(--font-tajawal), sans-serif;
+  font-weight: 700;
+}
+.t-num {
+  font-family: var(--font-barlow), var(--font-tajawal), sans-serif;
+  font-weight: 700;
+}
+.studio {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+.studio input,
+.studio textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.studio-canvas {
+  background-color: #0b1429;
+  background-image: radial-gradient(rgba(199, 206, 217, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.studio-select [data-id] {
+  cursor: move;
+}
+.studio-select [data-handle] {
+  cursor: grab;
+}
+.studio-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(199, 206, 217, 0.25) transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.studio-field {
+  width: 100%;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 16px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+@media (min-width: 640px) {
+  .studio-field {
+    font-size: 14px;
+  }
+}
+.studio-field:focus {
+  border-color: var(--ice);
+  box-shadow: 0 0 0 3px rgba(77, 168, 255, 0.25);
+}
+.studio-field::placeholder {
+  color: rgba(199, 206, 217, 0.45);
+}
+.studio-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.studio-range::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--ice) 0 var(--pct), rgba(255, 255, 255, 0.14) var(--pct) 100%);
+}
+.studio-range::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--ice) 0 var(--pct), rgba(255, 255, 255, 0.14) var(--pct) 100%);
+}
+.studio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 20px;
+  width: 20px;
+  margin-top: -7.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--ice);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.studio-range::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid var(--ice);
+}

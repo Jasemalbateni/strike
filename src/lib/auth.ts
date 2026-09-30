@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/types";
+import type { PageKey, Profile } from "@/lib/types";
 
 /** Current user's profile (cached per request). Redirects to /login when signed out. */
 export const getProfile = cache(async (): Promise<Profile> => {
@@ -20,9 +20,29 @@ export function canAccessMarketing(p: Profile) {
   return p.is_active && (p.role === "owner" || p.marketing_access);
 }
 
+/** page access — mirrors SQL has_access() */
+export function hasAccess(p: Profile, page: PageKey) {
+  return p.is_active && (p.role === "owner" || (p.access ?? []).includes(page));
+}
+
 /** players register, subscriptions, guardian data — mirrors SQL can_manage_players() */
 export function canManagePlayers(p: Profile) {
+  return hasAccess(p, "players");
+}
+
+/** cancel / restore a training session — mirrors SQL can_manage_sessions() */
+export function canManageSessions(p: Profile) {
   return p.is_active && ["owner", "branch_manager", "admin"].includes(p.role);
+}
+
+/** approve drills into the library — mirrors SQL can_approve_drills() */
+export function canApproveDrills(p: Profile) {
+  return p.is_active && (p.role === "owner" || p.role === "branch_manager");
+}
+
+/** send users without access back home */
+export function requireAccess(p: Profile, page: PageKey) {
+  if (!hasAccess(p, page)) redirect("/");
 }
 
 /** today's date in Kuwait as yyyy-MM-dd (the server runs in UTC) */

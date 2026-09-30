@@ -3,7 +3,7 @@ import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 export type PlayerKind = "subscriber" | "trial";
 export type AttendanceStatus = "present" | "absent" | "late" | "excused";
 
-export type Branch = { id: string; name: string; training_days: number[]; session_time: string | null; pitch_cost: number; is_active: boolean };
+export type Branch = { id: string; name: string; training_days: number[]; session_time: string | null; pitch_cost: number; is_active: boolean; session_minutes?: number };
 export type Group = { id: string; branch_id: string; name: string; age_min: number | null; age_max: number | null; position: number; is_active: boolean };
 
 export type Player = {

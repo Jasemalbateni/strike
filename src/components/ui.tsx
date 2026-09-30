@@ -111,7 +111,15 @@ export function Modal({
 }
 
 /* ---------- form bits ---------- */
-export function Field({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function Field({ label, children, className, group }: { label: string; children: ReactNode; className?: string; /** chip groups / several controls: not a <label> */ group?: boolean }) {
+  if (group) {
+    return (
+      <div role="group" aria-label={label} className={clsx("flex flex-col gap-1.5", className)}>
+        <span className="text-[13px] font-bold text-navy">{label}</span>
+        {children}
+      </div>
+    );
+  }
   return (
     <label className={clsx("flex flex-col gap-1.5", className)}>
       <span className="text-[13px] font-bold text-navy">{label}</span>

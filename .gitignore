@@ -42,3 +42,8 @@ next-env.d.ts
 
 # keep the example env
 !.env.example
+
+# design source files (converted into src/lib/drills/art.ts) and update bundles
+/Drawing Elements/
+*.ai
+.strike-update*.bundle
