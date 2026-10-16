@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, Ellipsis, X, type LucideIcon } from "lucide-react";
+import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, FileText, Ellipsis, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
@@ -23,6 +23,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
     ...(access.attendance ? [{ href: "/attendance", label: "الحضور", icon: ClipboardCheck, phoneRank: 1 }] : []),
     ...(access.players ? [{ href: "/players", label: "اللاعبين", icon: IdCard, phoneRank: 4 }] : []),
     ...(access.drills ? [{ href: "/drills", label: "التمارين", icon: PenTool, phoneRank: 2 }] : []),
+    ...(access.drills ? [{ href: "/sheets", label: "أوراق التمارين", short: "الأوراق", icon: FileText, phoneRank: 7 }] : []),
     ...(access.calendar ? [{ href: "/calendar", label: "التقويم", icon: CalendarDays, phoneRank: 3 }] : []),
     ...(access.marketing ? [{ href: "/marketing", label: "مركز التسويق", short: "التسويق", icon: Megaphone, phoneRank: 5 }] : []),
     ...(access.team ? [{ href: "/team", label: "الفريق", icon: Users, phoneRank: 6 }] : []),
@@ -46,7 +47,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
     <ConfirmProvider>
       <div className="min-h-dvh flex">
         {/* sidebar: icon rail on tablets incl. iPad landscape (md), full on laptops (xl+) */}
-        <aside className="hidden md:flex md:w-[76px] xl:w-[248px] shrink-0 flex-col bg-navy text-white sticky top-0 h-dvh transition-[width]">
+        <aside data-print-hide className="hidden md:flex md:w-[76px] xl:w-[248px] shrink-0 flex-col bg-navy text-white sticky top-0 h-dvh transition-[width]">
           <div className="px-3 xl:px-5 pt-5 xl:pt-6 pb-4 flex items-center justify-center xl:justify-start gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/strike-logo-light.svg" alt="STRIKE" className="h-10 xl:h-11 w-auto" />
@@ -94,7 +95,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
         {/* main */}
         <div className="flex-1 min-w-0 flex flex-col">
           {/* phone top bar */}
-          <header className="md:hidden sticky top-0 z-30 bg-navy text-white px-4 h-14 flex items-center justify-between pt-[env(safe-area-inset-top)] box-content">
+          <header data-print-hide className="md:hidden sticky top-0 z-30 bg-navy text-white px-4 h-14 flex items-center justify-between pt-[env(safe-area-inset-top)] box-content">
             <Link href="/" className="flex items-center gap-2.5" aria-label="الرئيسية">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand/strike-logo-light.svg" alt="STRIKE" className="h-8 w-auto" />
@@ -113,7 +114,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
           <main className="flex-1 pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-8">{children}</main>
 
           {/* phone bottom nav */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-silver-200 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5 flex">
+          <nav data-print-hide className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-silver-200 px-2 pb-[max(env(safe-area-inset-bottom),8px)] pt-1.5 flex">
             {phoneMain.map(({ href, label, short, icon: Icon }) => (
               <Link
                 key={href}

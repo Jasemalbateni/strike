@@ -5,7 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { formatDistanceToNowStrict, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
-import { BookOpen, Clock, FilePen, Hourglass, Plus, Search, Users, X } from "lucide-react";
+import { BookOpen, Clock, FilePen, FileText, Hourglass, Plus, Search, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { BoardStatic } from "@/components/drills/render";
 import { parseBoard } from "@/lib/drills/board";
@@ -60,9 +60,14 @@ export default function DrillLibrary({ me, initialDrills, staff, initialTab }: {
           <h1 className="display text-navy text-[26px] sm:text-[36px] leading-none">التمارين</h1>
           <p className="text-ink-2 text-sm mt-1.5">ارسم التمرين، أرسله للاعتماد، ويصير في مكتبة الأكاديمية للجميع.</p>
         </div>
-        <Link href="/drills/new" className="btn-primary h-11 px-4 shrink-0">
-          <Plus size={18} /> <span>تمرين جديد</span>
-        </Link>
+        <div className="flex gap-2 shrink-0">
+          <Link href="/sheets/new" className="btn-outline h-11 px-4 hidden sm:inline-flex">
+            <FileText size={18} /> <span>ورقة تمرين</span>
+          </Link>
+          <Link href="/drills/new" className="btn-primary h-11 px-4">
+            <Plus size={18} /> <span>تمرين جديد</span>
+          </Link>
+        </div>
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 mb-3">

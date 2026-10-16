@@ -1,0 +1,765 @@
+/* ورقة التمرين — ported 1:1 from the STRIKE drill-sheet HTML (editor + A4 preview + print) */
+
+.ds {
+  --ds-navy: #1c2d5a;
+  --ds-ice: #4da8ff;
+  --ds-silver: #c7ced9;
+  --ds-gold: #e7b53c;
+  --ds-zebra: #f4f6fa;
+  --ds-board: #d9e4ef;
+  --ds-err: #d64545;
+  --ds-ink-2: #4a5677;
+  color: var(--ds-navy);
+  font-size: 15px;
+}
+.ds .en,
+.ds .num {
+  font-family: var(--font-barlow), var(--font-tajawal), sans-serif;
+}
+
+/* ---------- toolbar ---------- */
+.ds-topbar {
+  background: var(--ds-navy);
+  color: #fff;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+  .ds-topbar {
+    top: 56px;
+  }
+}
+.ds-topbar h1 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+}
+.ds-topbar .en {
+  color: var(--ds-silver);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.ds-topbar .spacer {
+  flex: 1;
+}
+.ds-btn {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ds-navy);
+  background: #fff;
+  transition: background 0.15s;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ds-btn:hover {
+  background: #e9f3ff;
+}
+.ds-btn.ice {
+  background: var(--ds-ice);
+  color: var(--ds-navy);
+}
+.ds-btn.ice:hover {
+  background: #6cb8ff;
+}
+.ds-btn.ghost {
+  background: transparent;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+}
+.ds-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ds-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.ds-btn:focus-visible {
+  outline: 3px solid var(--ds-ice);
+  outline-offset: 2px;
+}
+
+/* kind switch: تمرين واحد / حصة كاملة */
+.ds-seg {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.ds-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--ds-silver);
+  font: inherit;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ds-seg button.on {
+  background: #fff;
+  color: var(--ds-navy);
+}
+
+/* ---------- workspace ---------- */
+.ds-workspace {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  min-height: calc(100vh - 60px);
+}
+@media (max-width: 1100px) {
+  .ds-workspace {
+    grid-template-columns: 1fr;
+  }
+  .ds-preview-wrap {
+    order: -1;
+  }
+}
+
+/* ---------- editor ---------- */
+.ds-editor {
+  background: #fff;
+  border-left: 1px solid var(--ds-silver);
+  padding: 22px 22px 60px;
+  overflow: auto;
+  max-height: calc(100vh - 60px);
+  position: sticky;
+  top: 60px;
+}
+@media (max-width: 1100px) {
+  .ds-editor {
+    position: static;
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid var(--ds-silver);
+  }
+}
+.ds-editor h2 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ds-ice);
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ds-silver);
+}
+.ds-editor h2:first-child {
+  margin-top: 0;
+}
+.ds-field {
+  margin-bottom: 12px;
+}
+.ds-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ds-ink-2);
+  margin-bottom: 4px;
+}
+.ds-field input,
+.ds-field textarea,
+.ds-field select {
+  width: 100%;
+  border: 1.5px solid var(--ds-silver);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ds-navy);
+  background: #fff;
+  min-height: 40px;
+}
+@media (min-width: 768px) {
+  .ds-field input,
+  .ds-field textarea,
+  .ds-field select {
+    font-size: 14px;
+  }
+}
+.ds-field input:focus,
+.ds-field textarea:focus,
+.ds-field select:focus {
+  outline: none;
+  border-color: var(--ds-ice);
+  box-shadow: 0 0 0 3px rgba(77, 168, 255, 0.2);
+}
+.ds-field textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.ds-field .hint {
+  font-size: 12px;
+  color: var(--ds-ink-2);
+  margin-top: 4px;
+}
+.ds-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ds-row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.ds-drop {
+  display: block;
+  border: 2px dashed var(--ds-silver);
+  border-radius: 8px;
+  padding: 18px;
+  text-align: center;
+  color: var(--ds-ink-2);
+  font-size: 13px;
+  background: var(--ds-zebra);
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  cursor: pointer;
+}
+.ds-drop.over {
+  border-color: var(--ds-ice);
+  background: #e9f3ff;
+}
+.ds-drop strong {
+  color: var(--ds-navy);
+}
+.ds-drop input {
+  display: none;
+}
+.ds-drop .thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 120px;
+  margin: 8px auto 0;
+  border-radius: 4px;
+}
+.ds-imgtools {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ds-imgtools .ds-btn {
+  background: var(--ds-zebra);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* session drill list */
+.ds-drills {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.ds-drill-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--ds-silver);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.ds-drill-row.on {
+  border-color: var(--ds-ice);
+  background: #e9f3ff;
+}
+.ds-drill-row .n {
+  font-family: var(--font-barlow), sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--ds-navy);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+.ds-drill-row.on .n {
+  background: var(--ds-ice);
+  color: var(--ds-navy);
+}
+.ds-drill-row .t {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ds-navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-drill-row .t.empty {
+  color: var(--ds-ink-2);
+  font-weight: 500;
+}
+.ds-drill-row .d {
+  font-size: 12px;
+  color: var(--ds-ink-2);
+}
+.ds-icon {
+  border: 0;
+  background: transparent;
+  color: var(--ds-ink-2);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.ds-icon:hover {
+  background: var(--ds-zebra);
+  color: var(--ds-navy);
+}
+.ds-icon:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+.ds-icon.del:hover {
+  color: var(--ds-err);
+}
+.ds-add {
+  width: 100%;
+  border: 1.5px dashed var(--ds-silver);
+  background: var(--ds-zebra);
+  color: var(--ds-navy);
+  border-radius: 6px;
+  padding: 9px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ds-add:hover {
+  border-color: var(--ds-ice);
+  background: #e9f3ff;
+}
+
+.ds-editor .actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 26px;
+}
+.ds-editor .actions .ds-btn {
+  background: var(--ds-navy);
+  color: #fff;
+  padding: 12px;
+  justify-content: center;
+}
+.ds-editor .actions .ds-btn.ice {
+  background: var(--ds-ice);
+  color: var(--ds-navy);
+}
+.ds-editor .actions .ds-btn.sub {
+  background: var(--ds-zebra);
+  color: var(--ds-navy);
+}
+.ds-editor .actions .ds-btn.danger {
+  background: #fff;
+  color: var(--ds-err);
+  border: 1.5px solid var(--ds-silver);
+}
+
+/* ---------- preview ---------- */
+.ds-preview-wrap {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  overflow: auto;
+  background: var(--ds-zebra);
+}
+@media (max-width: 640px) {
+  .ds-preview-wrap {
+    padding: 12px 0;
+    gap: 14px;
+  }
+}
+/* keep A4 proportions on narrow screens: scale the page down */
+.ds-page-scale {
+  width: 210mm;
+  max-width: 100%;
+}
+@media (max-width: 860px) {
+  .ds-page-scale {
+    width: 100%;
+    overflow: hidden;
+  }
+  .ds-page-scale .ds-sheet {
+    transform-origin: top right;
+    transform: scale(var(--ds-scale, 1));
+    margin-bottom: calc((var(--ds-scale, 1) - 1) * 297mm);
+  }
+}
+.ds-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+  color: var(--ds-navy);
+  box-shadow: 0 10px 40px rgba(28, 45, 90, 0.15);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  direction: rtl;
+}
+.ds-sheet-head {
+  background: var(--ds-navy);
+  color: #fff;
+  padding: 10mm 14mm 8mm;
+  display: flex;
+  align-items: center;
+  gap: 8mm;
+}
+.ds-sheet-head img {
+  height: 22mm;
+  flex: 0 0 auto;
+}
+.ds-sheet-head .t {
+  flex: 1;
+  min-width: 0;
+}
+.ds-sheet-head .kicker {
+  font-size: 10.5pt;
+  color: var(--ds-silver);
+  font-weight: 500;
+  margin: 0 0 2mm;
+}
+.ds-sheet-head h1 {
+  font-family: var(--font-bukra), var(--font-tajawal), sans-serif;
+  font-weight: 800;
+  font-size: 24pt;
+  line-height: 1.15;
+  margin: 0;
+  color: #fff;
+  word-wrap: break-word;
+}
+.ds-sheet-head .code {
+  font-family: var(--font-barlow), sans-serif;
+  font-weight: 600;
+  font-size: 12pt;
+  color: var(--ds-ice);
+  text-align: left;
+  line-height: 1.3;
+  flex: 0 0 auto;
+  direction: ltr;
+}
+.ds-sheet-head .code small {
+  display: block;
+  color: var(--ds-silver);
+  font-weight: 400;
+  font-size: 9pt;
+}
+.ds-accent {
+  height: 1.6mm;
+  background: var(--ds-ice);
+}
+
+.ds-sheet-body {
+  padding: 7mm 14mm 6mm;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5mm;
+}
+
+.ds-meta {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border: 0.5pt solid var(--ds-silver);
+  border-radius: 2mm;
+  overflow: hidden;
+}
+.ds-meta > div {
+  padding: 2.5mm 2mm;
+  text-align: center;
+  border-left: 0.5pt solid var(--ds-silver);
+}
+.ds-meta > div:last-child {
+  border-left: 0;
+}
+.ds-meta b {
+  display: block;
+  font-family: var(--font-barlow), sans-serif;
+  font-weight: 700;
+  font-size: 16pt;
+  line-height: 1;
+  color: var(--ds-navy);
+  direction: ltr;
+}
+.ds-meta b.ar {
+  font-family: var(--font-tajawal), sans-serif;
+  font-size: 13pt;
+  padding-top: 1mm;
+  direction: rtl;
+}
+.ds-meta span {
+  display: block;
+  font-size: 9.5pt;
+  color: var(--ds-ink-2);
+  margin-top: 1.2mm;
+  font-weight: 500;
+}
+
+.ds-diagram {
+  background: var(--ds-board);
+  border-radius: 2mm;
+  min-height: 70mm;
+  max-height: 96mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.ds-diagram img {
+  max-width: 100%;
+  max-height: 96mm;
+  object-fit: contain;
+  display: block;
+}
+.ds-diagram .empty {
+  color: var(--ds-ink-2);
+  font-size: 11pt;
+  text-align: center;
+  padding: 10mm;
+}
+.ds-diagram .empty svg {
+  display: block;
+  margin: 0 auto 3mm;
+  opacity: 0.5;
+}
+
+.ds-cols {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 6mm;
+}
+.ds-sec {
+  break-inside: avoid;
+}
+.ds-sec h3 {
+  font-size: 11.5pt;
+  font-weight: 800;
+  margin: 0 0 2mm;
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  color: var(--ds-navy);
+}
+.ds-sec h3::before {
+  content: "";
+  width: 2.2mm;
+  height: 2.2mm;
+  background: var(--ds-ice);
+  border-radius: 0.5mm;
+  flex: 0 0 auto;
+}
+.ds-sec h3.gold::before {
+  background: var(--ds-gold);
+}
+.ds-sec p {
+  margin: 0;
+  font-size: 11pt;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+.ds-sec ul {
+  margin: 0;
+  padding: 0 5mm 0 0;
+  font-size: 11pt;
+  line-height: 1.6;
+  list-style: disc;
+}
+.ds-sec ul li {
+  margin-bottom: 1mm;
+}
+.ds-sec ul li::marker {
+  color: var(--ds-ice);
+}
+.ds-sec.pts ul li::marker {
+  color: var(--ds-navy);
+}
+.ds-sec .none {
+  color: var(--ds-silver);
+  font-size: 10pt;
+  list-style: none;
+}
+
+/* session cover: drills table */
+.ds-plan {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11pt;
+}
+.ds-plan th {
+  background: var(--ds-navy);
+  color: #fff;
+  font-weight: 700;
+  padding: 2.5mm 3mm;
+  text-align: right;
+  font-size: 10.5pt;
+}
+.ds-plan td {
+  padding: 2.5mm 3mm;
+  border-bottom: 0.5pt solid var(--ds-silver);
+  vertical-align: top;
+}
+.ds-plan tr:nth-child(even) td {
+  background: var(--ds-zebra);
+}
+.ds-plan .n {
+  font-family: var(--font-barlow), sans-serif;
+  font-weight: 700;
+  font-size: 13pt;
+  color: var(--ds-ice);
+  width: 8mm;
+}
+.ds-plan .num {
+  direction: ltr;
+  text-align: right;
+}
+.ds-plan tfoot td {
+  font-weight: 800;
+  border-bottom: 0;
+  background: #fff;
+}
+.ds-plan-thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+}
+.ds-plan-thumbs > div {
+  background: var(--ds-board);
+  border-radius: 2mm;
+  aspect-ratio: 4/3;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.ds-plan-thumbs img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.ds-plan-thumbs .lbl {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  left: 0;
+  background: rgba(28, 45, 90, 0.85);
+  color: #fff;
+  font-size: 9pt;
+  padding: 1mm 2mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ds-sheet-foot {
+  padding: 3.5mm 14mm;
+  border-top: 0.5pt solid var(--ds-silver);
+  display: flex;
+  align-items: center;
+  gap: 6mm;
+  font-size: 9pt;
+  color: var(--ds-ink-2);
+  margin-top: auto;
+}
+.ds-sheet-foot .phil {
+  flex: 1;
+  text-align: center;
+  font-weight: 500;
+  color: var(--ds-ink-2);
+}
+.ds-sheet-foot .en {
+  font-weight: 600;
+  font-size: 10pt;
+  letter-spacing: 0.5px;
+  direction: ltr;
+}
+.ds-sheet-foot .coach {
+  font-size: 9.5pt;
+}
+
+/* ---------- print ---------- */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  [data-print-hide],
+  .ds-topbar,
+  .ds-editor {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .ds-workspace {
+    display: block;
+    min-height: 0;
+  }
+  .ds-preview-wrap {
+    padding: 0;
+    display: block;
+    overflow: visible;
+    background: #fff;
+  }
+  .ds-page-scale {
+    width: 210mm;
+    max-width: none;
+    overflow: visible;
+  }
+  .ds-page-scale .ds-sheet {
+    transform: none !important;
+    margin: 0 !important;
+  }
+  .ds-sheet {
+    box-shadow: none;
+    width: 210mm;
+    height: 297mm;
+    min-height: 0;
+    page-break-after: always;
+    break-after: page;
+  }
+  .ds-page-scale:last-child .ds-sheet {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
