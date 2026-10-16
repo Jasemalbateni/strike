@@ -5,13 +5,14 @@ import Link from "next/link";
 import clsx from "clsx";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from "date-fns";
 import { ar } from "date-fns/locale";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Clock, ClipboardCheck, Flag, Plus, Search, StickyNote, Trash2, Trophy, Palmtree, X, BookOpen } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronLeft, ChevronRight, Clock, ClipboardCheck, FileText, Flag, Layers, Plus, Printer, Search, StickyNote, Trash2, Trophy, Palmtree, X, BookOpen } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
 import { BoardStatic } from "@/components/drills/render";
 import { parseBoard } from "@/lib/drills/board";
-import { CATEGORIES, type Drill } from "@/lib/drills/meta";
+import type { Drill } from "@/lib/drills/meta";
+import { flattenLibrary, isMatch, normalizeDrills, SHEET_CATEGORIES, type DrillSheet, type SheetDrill } from "@/lib/sheets";
 import { isTrainingDay, type Branch, type Group } from "@/lib/players";
 import { useMediaQuery } from "@/lib/use-media-query";
 import { bidi } from "@/lib/bidi";
@@ -22,6 +23,9 @@ const DAY_SHORT_AR = ["سبت", "أحد", "اثنين", "ثلاثاء", "أرب�
 
 type Kind = "drill" | "event" | "match" | "holiday" | "note";
 type DrillLite = Pick<Drill, "id" | "title" | "category" | "duration_min" | "board" | "status">;
+type SheetLite = Pick<DrillSheet, "id" | "title" | "kind" | "drills" | "status">;
+/** everything the plan needs to join: legacy drawings + drill sheets */
+const PLAN_SELECT = "*, drills(id, title, category, duration_min, board, status), drill_sheets(id, title, kind, drills, status)";
 type Item = {
   id: string;
   item_date: string;
@@ -29,6 +33,9 @@ type Item = {
   group_id: string | null;
   kind: Kind;
   drill_id: string | null;
+  sheet_id: string | null;
+  sheet_index: number | null;
+  drill_sheets?: SheetLite | null;
   title: string;
   notes: string;
   duration_min: number | null;
@@ -38,6 +45,24 @@ type Item = {
   drills?: DrillLite | null;
 };
 type SessionLite = { id: string; branch_id: string; session_date: string; cancelled: boolean };
+
+/** what a plan row shows: a drill of a sheet (new) or a legacy drawing */
+function itemDrill(it: Item): { title: string; cat: string; dur: number | null; img?: string; href: string; match: boolean; sheet?: SheetLite | null } {
+  if (it.sheet_id && it.drill_sheets) {
+    const d: SheetDrill | undefined = normalizeDrills(it.drill_sheets.drills)[it.sheet_index ?? 0];
+    return {
+      title: d ? (isMatch(d) ? `${d.title || "مباراة"}${d.format ? ` · ${d.format}` : ""}` : d.title) : "تمرين محذوف",
+      cat: d ? (isMatch(d) ? "مباراة" : d.cat) : "",
+      dur: it.duration_min ?? (d ? parseInt(d.dur, 10) || null : null),
+      img: d?.img,
+      href: `/sheets/${it.sheet_id}?d=${it.sheet_index ?? 0}`,
+      match: !!d && isMatch(d),
+      sheet: it.drill_sheets,
+    };
+  }
+  const d = it.drills;
+  return { title: d?.title ?? "تمرين محذوف", cat: d?.category ?? "", dur: it.duration_min ?? d?.duration_min ?? null, href: d ? `/drills/${d.id}` : "#", match: false };
+}
 
 const KIND: Record<Exclude<Kind, "drill">, { label: string; icon: React.ReactNode; chip: string }> = {
   event: { label: "حدث", icon: <Flag size={14} />, chip: "bg-gold-100 text-navy-900" },
@@ -77,7 +102,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
     let alive = true;
     (async () => {
       const [pi, ss] = await Promise.all([
-        supabase.from("plan_items").select("*, drills(id, title, category, duration_min, board, status)").gte("item_date", from).lte("item_date", to).order("position"),
+        supabase.from("plan_items").select(PLAN_SELECT).gte("item_date", from).lte("item_date", to).order("position"),
         supabase.from("sessions").select("id, branch_id, session_date, cancelled").gte("session_date", from).lte("session_date", to),
       ]);
       const sess = (ss.data ?? []) as SessionLite[];
@@ -135,7 +160,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
   }
 
   async function remove(it: Item) {
-    const name = it.kind === "drill" ? it.drills?.title ?? "التمرين" : it.title;
+    const name = it.kind === "drill" ? itemDrill(it).title : it.title;
     if (!(await confirm({ title: `إزالة «${name}» من اليوم؟`, message: it.kind === "drill" ? "التمرين يبقى في المكتبة، بس ينشال من هذا اليوم." : undefined, confirmText: "إزالة" }))) return;
     setItems((all) => all.filter((x) => x.id !== it.id));
     const { error } = await supabase.from("plan_items").delete().eq("id", it.id);
@@ -145,16 +170,25 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
     }
   }
 
-  async function addDrill(d: DrillLite, groupId: string | null) {
-    const pos = Math.max(-1, ...itemsOn(selected).map((x) => x.position)) + 1;
-    const { data, error } = await supabase
-      .from("plan_items")
-      .insert({ item_date: selected, branch_id: branchId ?? branches[0]?.id ?? null, group_id: groupId, kind: "drill", drill_id: d.id, duration_min: d.duration_min, position: pos })
-      .select("*, drills(id, title, category, duration_min, board, status)")
-      .single();
+  /** add one drill (or match) of a sheet, or a whole session sheet (every item, in order) */
+  async function addFromSheet(sheet: SheetLite, index: number | null, groupId: string | null) {
+    const all = normalizeDrills(sheet.drills);
+    const picks = index === null ? all.map((d, i) => ({ d, i })) : [{ d: all[index], i: index }];
+    let pos = Math.max(-1, ...itemsOn(selected).map((x) => x.position)) + 1;
+    const rows = picks.map(({ d, i }) => ({
+      item_date: selected,
+      branch_id: branchId ?? branches[0]?.id ?? null,
+      group_id: groupId,
+      kind: "drill",
+      sheet_id: sheet.id,
+      sheet_index: i,
+      duration_min: parseInt(d.dur, 10) || null,
+      position: pos++,
+    }));
+    const { data, error } = await supabase.from("plan_items").insert(rows).select(PLAN_SELECT);
     if (error || !data) return flash("تعذّرت الإضافة");
-    setItems((all) => [...all.filter((x) => x.id !== data.id), data as Item]);
-    flash("أُضيف التمرين لليوم");
+    setItems((cur) => [...cur.filter((x) => !data.some((n) => n.id === x.id)), ...(data as Item[])]);
+    flash(index === null ? "أُضيفت الحصة كاملة لليوم" : "أُضيف التمرين لليوم");
   }
 
   const sel = parseISO(selected);
@@ -163,7 +197,9 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
   const selEvents = selItems.filter((i) => i.kind !== "drill");
   const selTraining = trainingOn(selected);
   const selSessions = sessionOn(selected);
-  const planned = selDrills.reduce((s, i) => s + (i.duration_min ?? i.drills?.duration_min ?? 0), 0);
+  const planned = selDrills.reduce((s, i) => s + (itemDrill(i).dur ?? 0), 0);
+  // session sheets planned on this day (for the print link)
+  const selSheets = selDrills.map((i) => i.drill_sheets).filter((sh, idx, arr): sh is SheetLite => !!sh && sh.kind === "session" && arr.findIndex((x) => x?.id === sh.id) === idx);
   const sessionLen = selTraining[0]?.session_minutes ?? 60;
   const canRemove = (it: Item) => it.created_by === me.id || me.canApprove || me.canManage;
 
@@ -208,6 +244,18 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
             <div className={clsx("h-full rounded-full", planned > sessionLen ? "bg-error" : "bg-ice")} style={{ width: `${Math.min(100, (planned / sessionLen) * 100)}%` }} />
           </div>
         )}
+        {selSheets.length > 0 && (
+          <div className="grid gap-1.5 mb-2">
+            {selSheets.map((sh) => (
+              <Link key={sh.id} href={`/sheets/${sh.id}`} className="rounded-xl bg-gold-100 text-navy-900 px-3 py-2 text-[13px] font-bold flex items-center gap-2 hover:bg-gold/40">
+                <Layers size={15} /> <span className="truncate">حصة: {sh.title}</span>
+                <span className="ms-auto inline-flex items-center gap-1 text-[12px]">
+                  <Printer size={14} /> الورقة / PDF
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
         {selDrills.length === 0 ? (
           <div className="rounded-xl border border-dashed border-silver p-4 text-center text-ink-2 text-[13px]">لا توجد تمارين لهذا اليوم بعد.</div>
         ) : (
@@ -218,7 +266,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
           </div>
         )}
         <button type="button" onClick={() => setPicker(true)} className="btn-primary w-full mt-3 h-11">
-          <Plus size={18} /> تمرين من المكتبة
+          <Plus size={18} /> تمرين أو حصة من المكتبة
         </button>
       </div>
 
@@ -355,7 +403,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
                     <div className="mt-1 grid gap-0.5 w-full">
                       {its.slice(0, 3).map((it) => (
                         <span key={it.id} className={clsx("truncate rounded-md px-1.5 py-0.5 text-[11px] font-bold", it.kind === "drill" ? "bg-navy text-white" : KIND[it.kind as Exclude<Kind, "drill">].chip)}>
-                          {it.kind === "drill" ? it.drills?.title ?? "تمرين" : it.title}
+                          {it.kind === "drill" ? itemDrill(it).title : it.title}
                         </span>
                       ))}
                       {its.length > 3 && <span className="text-[10.5px] font-bold text-ink-2 px-1">+{its.length - 3}</span>}
@@ -391,7 +439,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
 
       {toast && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-navy text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{toast}</div>}
 
-      {picker && <DrillPicker onClose={() => setPicker(false)} groups={groups.filter((g) => !branchId || g.branch_id === branchId)} dateLabel={`${format(sel, "EEEE d MMMM", { locale: ar })}`} onPick={(d, g) => addDrill(d, g)} />}
+      {picker && <DrillPicker onClose={() => setPicker(false)} groups={groups.filter((g) => !branchId || g.branch_id === branchId)} dateLabel={`${format(sel, "EEEE d MMMM", { locale: ar })}`} onPick={addFromSheet} />}
       {eventForm && (
         <EventModal
           item={eventForm === "new" ? null : eventForm}
@@ -416,22 +464,34 @@ function fmtTime(t: string) {
 }
 
 function DrillRow({ it, index, last, group, onUp, onDown, onRemove }: { it: Item; index: number; last: boolean; group?: string; onUp: () => void; onDown: () => void; onRemove?: () => void }) {
-  const d = it.drills;
-  const board = useMemo(() => (d ? parseBoard(d.board) : null), [d]);
+  const x = itemDrill(it);
+  const legacy = it.drills;
+  const board = useMemo(() => (!it.sheet_id && legacy ? parseBoard(legacy.board) : null), [it.sheet_id, legacy]);
   return (
     <div className="rounded-xl border border-silver-200 bg-white p-2 flex items-center gap-2.5">
       <span className="num text-[12px] font-bold text-ink-2 w-4 text-center shrink-0">{index + 1}</span>
-      <Link href={d ? `/drills/${d.id}` : "#"} className="flex items-center gap-2.5 min-w-0 flex-1">
-        <span className="w-[74px] h-[50px] rounded-lg overflow-hidden bg-navy-900 shrink-0 grid place-items-center">{board ? <BoardStatic board={board} className="w-full h-full" /> : null}</span>
+      <Link href={x.href} className="flex items-center gap-2.5 min-w-0 flex-1">
+        <span className={clsx("w-[74px] h-[50px] rounded-lg overflow-hidden shrink-0 grid place-items-center", x.match ? "bg-navy text-gold" : "bg-[#d9e4ef]")}>
+          {board ? (
+            <BoardStatic board={board} className="w-full h-full" />
+          ) : x.img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={x.img} alt="" className="w-full h-full object-contain" />
+          ) : x.match ? (
+            <Trophy size={20} />
+          ) : (
+            <FileText size={18} className="text-navy/40" />
+          )}
+        </span>
         <span className="min-w-0">
-          <span className="block font-bold text-navy text-[14px] truncate">{d?.title ?? "تمرين محذوف"}</span>
+          <span className="block font-bold text-navy text-[14px] truncate">{x.title}</span>
           <span className="flex items-center gap-2 text-[11.5px] text-ink-2">
-            {(it.duration_min ?? d?.duration_min) ? (
+            {x.dur ? (
               <span className="inline-flex items-center gap-1">
-                <Clock size={12} /> <span className="num">{it.duration_min ?? d?.duration_min}</span> د
+                <Clock size={12} /> <span className="num">{x.dur}</span> د
               </span>
             ) : null}
-            {d?.category && <span className="truncate">{d.category}</span>}
+            {x.cat && <span className="truncate">{x.cat}</span>}
             {group && <span className="chip bg-navy-50 text-navy text-[10.5px]">{group}</span>}
           </span>
         </span>
@@ -453,9 +513,10 @@ function DrillRow({ it, index, last, group, onUp, onDown, onRemove }: { it: Item
   );
 }
 
-function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => void; groups: Group[]; dateLabel: string; onPick: (d: DrillLite, groupId: string | null) => void }) {
+function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => void; groups: Group[]; dateLabel: string; onPick: (sheet: SheetLite, index: number | null, groupId: string | null) => void }) {
   const supabase = useMemo(() => createClient(), []);
-  const [list, setList] = useState<DrillLite[] | null>(null);
+  const [sheets, setSheets] = useState<SheetLite[] | null>(null);
+  const [tab, setTab] = useState<"drills" | "sessions">("drills");
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -463,75 +524,145 @@ function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => vo
   useEffect(() => {
     let alive = true;
     supabase
-      .from("drills")
-      .select("id, title, category, duration_min, board, status")
+      .from("drill_sheets")
+      .select("id, title, kind, drills, status")
       .eq("status", "approved")
-      .order("title")
+      .order("updated_at", { ascending: false })
+      .limit(500)
       .then(({ data }) => {
-        if (alive) setList((data ?? []) as DrillLite[]);
+        if (alive) setSheets((data ?? []) as SheetLite[]);
       });
     return () => {
       alive = false;
     };
   }, [supabase]);
-  const shown = (list ?? []).filter((d) => (!cat || d.category === cat) && (!q.trim() || d.title.includes(q.trim())));
-  const cats = CATEGORIES.filter((c) => (list ?? []).some((d) => d.category === c));
+  const needle = q.trim();
+  const library = flattenLibrary((sheets ?? []) as DrillSheet[]);
+  const drills = library.filter((x) => (!cat || x.drill.cat === cat) && (!needle || x.drill.title.includes(needle) || x.drill.code.includes(needle)));
+  const sessions = (sheets ?? []).filter((sh) => sh.kind === "session" && (!needle || sh.title.includes(needle)));
+  const cats = SHEET_CATEGORIES.filter((c) => library.some((x) => x.drill.cat === c));
+  const groupChips =
+    groups.length > 0 ? (
+      <>
+        <button type="button" onClick={() => setGroupId(null)} className={clsx("chip h-8 px-3 text-[12.5px]", !groupId ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+          كل الفئات
+        </button>
+        {groups.map((g) => (
+          <button key={g.id} type="button" onClick={() => setGroupId(g.id)} className={clsx("chip h-8 px-3 text-[12.5px]", groupId === g.id ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+            {bidi(g.name)}
+          </button>
+        ))}
+      </>
+    ) : null;
   return (
-    <Modal open onClose={onClose} title={`تمرين ليوم ${dateLabel}`} wide footer={<button type="button" className="btn-primary ms-auto" onClick={onClose}>تم</button>}>
+    <Modal open onClose={onClose} title={`خطة يوم ${dateLabel}`} wide footer={<button type="button" className="btn-primary ms-auto" onClick={onClose}>تم</button>}>
       <div className="grid gap-3">
-        <label className="field h-11 flex items-center gap-2 py-0">
-          <Search size={16} className="text-ink-2 shrink-0" />
-          <input className="bg-transparent outline-none flex-1 min-w-0" placeholder="بحث في المكتبة" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
-        <div className="flex flex-wrap gap-1.5">
-          {groups.length > 0 && (
-            <>
-              <button type="button" onClick={() => setGroupId(null)} className={clsx("chip h-8 px-3 text-[12.5px]", !groupId ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
-                كل الفئات
-              </button>
-              {groups.map((g) => (
-                <button key={g.id} type="button" onClick={() => setGroupId(g.id)} className={clsx("chip h-8 px-3 text-[12.5px]", groupId === g.id ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
-                  {bidi(g.name)}
-                </button>
-              ))}
-              <span className="w-px bg-silver-200 mx-1" />
-            </>
-          )}
-          {cats.map((c) => (
-            <button key={c} type="button" onClick={() => setCat(cat === c ? null : c)} className={clsx("chip h-8 px-3 text-[12.5px]", cat === c ? "bg-ice text-navy-900" : "bg-white border border-silver-200 text-navy")}>
-              {c}
+        <div className="flex gap-1.5">
+          {(
+            [
+              ["drills", "تمارين", <FileText key="d" size={15} />],
+              ["sessions", "حصص كاملة", <Layers key="s" size={15} />],
+            ] as const
+          ).map(([v, l, ic]) => (
+            <button key={v} type="button" onClick={() => setTab(v)} className={clsx("h-10 px-3.5 rounded-xl inline-flex items-center gap-2 text-[14px] font-bold", tab === v ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+              {ic} {l}
+              <span className={clsx("num text-[12px] min-w-5 h-5 px-1.5 rounded-full grid place-items-center", tab === v ? "bg-white/15" : "bg-silver-100 text-ink-2")}>{v === "drills" ? library.length : (sheets ?? []).filter((x) => x.kind === "session").length}</span>
             </button>
           ))}
         </div>
-        {list === null ? (
+        <label className="field h-11 flex items-center gap-2 py-0">
+          <Search size={16} className="text-ink-2 shrink-0" />
+          <input className="bg-transparent outline-none flex-1 min-w-0" placeholder={tab === "drills" ? "بحث باسم التمرين أو الرمز" : "بحث باسم الحصة"} value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {groupChips}
+          {tab === "drills" && cats.length > 0 && groupChips && <span className="w-px h-6 bg-silver-200 mx-1" />}
+          {tab === "drills" &&
+            cats.map((c) => (
+              <button key={c} type="button" onClick={() => setCat(cat === c ? null : c)} className={clsx("chip h-8 px-3 text-[12.5px]", cat === c ? "bg-ice text-navy-900" : "bg-white border border-silver-200 text-navy")}>
+                {c}
+              </button>
+            ))}
+        </div>
+        {sheets === null ? (
           <div className="p-8 text-center text-ink-2">جارٍ التحميل…</div>
-        ) : shown.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">
-            {list.length === 0 ? "المكتبة فاضية — التمارين المعتمدة تظهر هنا." : "ما في نتائج."}
-          </div>
+        ) : tab === "drills" ? (
+          drills.length === 0 ? (
+            <div className="p-8 text-center text-ink-2">{library.length === 0 ? "المكتبة فاضية — أوراق التمارين المعتمدة تظهر هنا." : "ما في نتائج."}</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[55vh] overflow-auto p-0.5">
+              {drills.map((x) => {
+                const key = `${x.sheet.id}:${x.index}`;
+                const done = added.includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      onPick(x.sheet, x.index, groupId);
+                      setAdded((a) => [...a, key]);
+                    }}
+                    className={clsx("rounded-xl border overflow-hidden text-start transition bg-white", done ? "border-ice ring-2 ring-ice/40" : "border-silver-200 hover:border-ice")}
+                  >
+                    <span className="block aspect-[16/11] bg-[#d9e4ef] grid place-items-center overflow-hidden">
+                      {x.drill.img ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={x.drill.img} alt="" className="w-full h-full object-contain" />
+                      ) : (
+                        <FileText size={28} className="text-navy/30" />
+                      )}
+                    </span>
+                    <div className="p-2">
+                      <div className="font-bold text-navy text-[13px] leading-snug line-clamp-2">{x.drill.title}</div>
+                      <div className="text-[11px] text-ink-2 mt-0.5">
+                        {x.drill.cat}
+                        {x.drill.dur ? <span className="num"> · {x.drill.dur} د</span> : null}
+                        {done && <span className="text-ice-600 font-bold"> · أُضيف</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        ) : sessions.length === 0 ? (
+          <div className="p-8 text-center text-ink-2">ما في حصص كاملة معتمدة بعد — أنشئ ورقة «حصة كاملة» من مكتبة التمارين.</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {shown.map((d) => {
-              const done = added.includes(d.id);
+          <div className="grid gap-2 max-h-[55vh] overflow-auto p-0.5">
+            {sessions.map((sh) => {
+              const list = normalizeDrills(sh.drills);
+              const mins = list.reduce((n, d) => n + (parseInt(d.dur, 10) || 0), 0);
+              const done = added.includes(sh.id);
               return (
                 <button
-                  key={d.id}
+                  key={sh.id}
                   type="button"
                   onClick={() => {
-                    onPick(d, groupId);
-                    setAdded((a) => [...a, d.id]);
+                    onPick(sh, null, groupId);
+                    setAdded((a) => [...a, sh.id]);
                   }}
-                  className={clsx("rounded-xl border overflow-hidden text-start transition", done ? "border-ice ring-2 ring-ice/40" : "border-silver-200 hover:border-ice")}
+                  className={clsx("rounded-xl border bg-white p-2.5 text-start flex items-center gap-3 transition", done ? "border-ice ring-2 ring-ice/40" : "border-silver-200 hover:border-ice")}
                 >
-                  <PickerThumb d={d} />
-                  <div className="p-2">
-                    <div className="font-bold text-navy text-[13px] leading-snug line-clamp-2">{d.title}</div>
-                    <div className="text-[11px] text-ink-2 mt-0.5">
-                      {d.category}
-                      {d.duration_min ? <span className="num"> · {d.duration_min} د</span> : null}
-                      {done && <span className="text-ice-600 font-bold"> · أُضيف</span>}
-                    </div>
-                  </div>
+                  <span className="w-[74px] h-[50px] rounded-lg overflow-hidden bg-[#d9e4ef] shrink-0 grid place-items-center">
+                    {list.find((d) => d.img)?.img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={list.find((d) => d.img)!.img} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <Layers size={20} className="text-navy/40" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold text-navy text-[14px] truncate">{sh.title}</span>
+                    <span className="block text-[11.5px] text-ink-2 truncate">
+                      <span className="num">{list.filter((d) => !isMatch(d)).length}</span> تمرين{list.some(isMatch) ? " + مباراة" : ""}
+                      {mins ? (
+                        <span className="num"> · {mins} د</span>
+                      ) : null}
+                      {" · "}
+                      {list.map((d) => (isMatch(d) ? `مباراة ${d.format}` : d.title)).join(" ← ")}
+                    </span>
+                  </span>
+                  <span className={clsx("chip shrink-0", done ? "bg-ice text-navy-900" : "bg-navy text-white")}>{done ? "أُضيفت" : "إضافة الحصة"}</span>
                 </button>
               );
             })}
@@ -539,15 +670,6 @@ function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => vo
         )}
       </div>
     </Modal>
-  );
-}
-
-function PickerThumb({ d }: { d: DrillLite }) {
-  const board = useMemo(() => parseBoard(d.board), [d.board]);
-  return (
-    <span className="block aspect-[16/11] bg-navy-900">
-      <BoardStatic board={board} className="w-full h-full" />
-    </span>
   );
 }
 
