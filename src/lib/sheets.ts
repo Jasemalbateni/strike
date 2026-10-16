@@ -20,7 +20,11 @@ export type SheetDrill = {
   prog: string;
   /** public URL of the uploaded diagram (storage bucket drill-sheets) */
   img: string;
+  /** the drawing (drills.id) this diagram was rendered from, if any — lets the coach reopen and redraw it */
+  drill_id?: string | null;
 };
+
+export type SheetStatus = "draft" | "pending" | "approved" | "returned";
 
 export type DrillSheet = {
   id: string;
@@ -29,10 +33,38 @@ export type DrillSheet = {
   session_date: string | null;
   age_group: string;
   drills: SheetDrill[];
+  status: SheetStatus;
+  review_note: string;
   author_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export const SHEET_STATUS_LABEL: Record<SheetStatus, string> = {
+  draft: "مسودة",
+  pending: "بانتظار الاعتماد",
+  approved: "في المكتبة",
+  returned: "مُرجع للتعديل",
+};
+
+export const SHEET_STATUS_CHIP: Record<SheetStatus, string> = {
+  draft: "bg-silver-100 text-ink-2",
+  pending: "bg-gold-100 text-navy-900",
+  approved: "bg-ice-100 text-navy",
+  returned: "bg-error-100 text-error",
+};
+
+/** one library entry per drill inside an approved sheet */
+export type LibraryDrill = { sheet: DrillSheet; index: number; drill: SheetDrill };
+
+export function flattenLibrary(sheets: DrillSheet[]): LibraryDrill[] {
+  const out: LibraryDrill[] = [];
+  for (const sheet of sheets) normalizeDrills(sheet.drills).forEach((drill, index) => out.push({ sheet, index, drill }));
+  return out;
+}
 
 export const SHEET_CATEGORIES = ["تمرير واستقبال", "المراوغة والتحكم", "التسديد", "الدفاع 1v1", "ألعاب مصغّرة", "الإحماء", "التنسيق الحركي", "أخرى"];
 export const SHEET_AGES = ["5–6", "7–8", "9–10", "الكل"];
@@ -57,6 +89,7 @@ export function newDrill(): SheetDrill {
     pts: "",
     prog: "",
     img: "",
+    drill_id: null,
   };
 }
 

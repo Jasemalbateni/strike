@@ -188,3 +188,17 @@ export function downloadBlob(blob: Blob, name: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+
+/** plain board image (no STRIKE frame) — used as the diagram of a drill sheet, which has its own header */
+export async function exportBoardPlainPng(svg: SVGSVGElement, W: number, H: number, maxPx = 1600): Promise<Blob | null> {
+  const scale = Math.min(3, maxPx / Math.max(W, H));
+  const bw = Math.round(W * scale), bh = Math.round(H * scale);
+  const img = await boardImage(svg, W, H, scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = bw;
+  canvas.height = bh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, bw, bh);
+  return await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
+}

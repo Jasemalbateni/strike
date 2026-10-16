@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, FileText, Ellipsis, X, type LucideIcon } from "lucide-react";
+import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, Ellipsis, X, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
@@ -22,8 +22,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
     { href: "/", label: "الرئيسية", icon: Home, phoneRank: 0 },
     ...(access.attendance ? [{ href: "/attendance", label: "الحضور", icon: ClipboardCheck, phoneRank: 1 }] : []),
     ...(access.players ? [{ href: "/players", label: "اللاعبين", icon: IdCard, phoneRank: 4 }] : []),
-    ...(access.drills ? [{ href: "/drills", label: "التمارين", icon: PenTool, phoneRank: 2 }] : []),
-    ...(access.drills ? [{ href: "/sheets", label: "أوراق التمارين", short: "الأوراق", icon: FileText, phoneRank: 7 }] : []),
+    ...(access.drills ? [{ href: "/drills", label: "مكتبة التمارين", short: "التمارين", icon: PenTool, phoneRank: 2 }] : []),
     ...(access.calendar ? [{ href: "/calendar", label: "التقويم", icon: CalendarDays, phoneRank: 3 }] : []),
     ...(access.marketing ? [{ href: "/marketing", label: "مركز التسويق", short: "التسويق", icon: Megaphone, phoneRank: 5 }] : []),
     ...(access.team ? [{ href: "/team", label: "الفريق", icon: Users, phoneRank: 6 }] : []),

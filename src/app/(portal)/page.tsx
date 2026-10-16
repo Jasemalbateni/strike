@@ -54,9 +54,9 @@ export default async function HomePage() {
     marketing ? supabase.from("mk_posts").select("id", { count: "exact", head: true }).gte("scheduled_date", today).neq("status", "published") : Promise.resolve({ count: 0 }),
     marketing ? supabase.from("mk_posts").select("id", { count: "exact", head: true }).eq("status", "review") : Promise.resolve({ count: 0 }),
     can.players ? supabase.from("subscriptions").select("player_id, end_date").order("end_date", { ascending: false }) : Promise.resolve({ data: [] }),
-    can.drills ? supabase.from("drills").select("id", { count: "exact", head: true }).eq("status", "pending") : Promise.resolve({ count: 0 }),
-    can.drills ? supabase.from("drills").select("id", { count: "exact", head: true }).eq("status", "returned").eq("author_id", profile.id) : Promise.resolve({ count: 0 }),
-    can.drills ? supabase.from("drills").select("id", { count: "exact", head: true }).eq("status", "approved") : Promise.resolve({ count: 0 }),
+    can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "pending") : Promise.resolve({ count: 0 }),
+    can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "returned").eq("author_id", profile.id) : Promise.resolve({ count: 0 }),
+    can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "approved") : Promise.resolve({ count: 0 }),
   ]);
   const presentToday = presentRes.count ?? 0;
 
@@ -116,12 +116,12 @@ export default async function HomePage() {
         )}
         {can.approve && pending > 0 && (
           <Alert href="/drills?tab=pending" tone="gold" icon={<Hourglass size={18} className="shrink-0" />}>
-            <span className="num">{pending}</span> {pending === 1 ? "تمرين بانتظار اعتمادك" : "تمارين بانتظار اعتمادك"}
+            <span className="num">{pending}</span> {pending === 1 ? "ورقة تمرين بانتظار اعتمادك" : "أوراق تمارين بانتظار اعتمادك"}
           </Alert>
         )}
         {can.drills && returned > 0 && (
           <Alert href="/drills?tab=mine" tone="error" icon={<Undo2 size={18} className="shrink-0" />}>
-            <span className="num">{returned}</span> {returned === 1 ? "تمرين أُرجع لك للتعديل" : "تمارين أُرجعت لك للتعديل"}
+            <span className="num">{returned}</span> {returned === 1 ? "ورقة أُرجعت لك للتعديل" : "أوراق أُرجعت لك للتعديل"}
           </Alert>
         )}
       </div>
@@ -135,7 +135,7 @@ export default async function HomePage() {
         )}
 
         {can.drills && (
-          <Card href="/drills" icon={<PenTool size={21} />} iconCls="bg-navy text-white" title="التمارين" sub="لوحة الرسم ومكتبة الأكاديمية">
+          <Card href="/drills" icon={<PenTool size={21} />} iconCls="bg-navy text-white" title="مكتبة التمارين" sub="أوراق التمارين المعتمدة ولوحة الرسم">
             <Stat n={libraryRes.count ?? 0} label="في المكتبة" />
             {can.approve ? <Stat n={pending} label="بانتظار الاعتماد" gold={pending > 0} /> : <Stat n={returned} label="مُرجع للتعديل" red={returned > 0} />}
           </Card>

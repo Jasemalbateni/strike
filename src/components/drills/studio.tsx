@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { format, addDays, parseISO } from "date-fns";
-import { ArrowRight, BadgeCheck, CalendarPlus, Check, CopyPlus, Ellipsis, FilePen, Info, Send, Trash2, Undo2 } from "lucide-react";
+import { ArrowRight, CalendarPlus, Check, CopyPlus, Ellipsis, FileText, Info, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
@@ -43,14 +43,14 @@ type Props = {
 
 const backupKey = (id: string | null) => `strike-drill-backup:${id ?? "new"}`;
 
-export default function DrillStudio({ drill, source, me, authorName, reviewerName, branches, groups, today }: Props) {
+export default function DrillStudio({ drill, source, me, authorName, branches, groups, today }: Props) {
   const router = useRouter();
   const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
 
   const [drillId, setDrillId] = useState<string | null>(drill?.id ?? null);
-  const [status, setStatus] = useState<DrillStatus>(drill?.status ?? "draft");
-  const [reviewNote, setReviewNote] = useState(drill?.review_note ?? "");
+  const [, setStatus] = useState<DrillStatus>(drill?.status ?? "draft");
+  const [, setReviewNote] = useState(drill?.review_note ?? "");
   const [authorId] = useState<string | null>(drill?.author_id ?? me.id);
   const [meta, setMeta] = useState<DrillMeta>(() => {
     const base = drill ?? source;
@@ -67,13 +67,12 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [afterDetails, setAfterDetails] = useState<null | "save" | "submit" | "approve">(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [returnOpen, setReturnOpen] = useState(false);
   const [calOpen, setCalOpen] = useState(false);
   const [toast, setToast] = useState<{ text: string; tone?: "ok" | "err" } | null>(null);
   const [backup, setBackup] = useState<{ board: Board; meta: DrillMeta; at: number } | null>(null);
 
   const isAuthor = !drill || drill.author_id === me.id;
-  const canEdit = me.canDraw && (!drillId ? true : me.canApprove ? status !== "draft" || authorId === me.id : isAuthor && status !== "approved");
+  const canEdit = me.canDraw && (!drillId || isAuthor || authorId === me.id || me.isOwner);
   const readOnly = !canEdit;
 
   function flash(text: string, tone: "ok" | "err" = "ok") {
@@ -140,7 +139,7 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
     };
     let res;
     if (!drillId) {
-      const st: DrillStatus = nextStatus ?? (me.canApprove ? "approved" : "draft");
+      const st: DrillStatus = nextStatus ?? "draft";
       res = await supabase.from("drills").insert({ ...payload, status: st }).select("id, status, review_note").single();
     } else {
       res = await supabase.from("drills").update(payload).eq("id", drillId).select("id, status, review_note").single();
@@ -163,26 +162,15 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
   async function save(m?: DrillMeta) {
     if (readOnly || saving) return;
     const ok = await persist(undefined, undefined, m);
-    if (ok) flash(status === "approved" || (!drillId && me.canApprove) ? "تم الحفظ في المكتبة" : "تم الحفظ");
+    if (ok) flash("تم حفظ الرسم");
   }
-  async function saveDraft() {
-    const ok = await persist("draft");
-    if (ok) flash("حُفظ كمسودة");
-  }
-  async function submit(m?: DrillMeta) {
-    const ok = await persist("pending", undefined, m);
-    if (ok) flash("أُرسل للاعتماد");
-  }
-  async function approve(m?: DrillMeta) {
-    const ok = await persist("approved", undefined, m);
-    if (ok) flash("اعتُمد وأُضيف للمكتبة");
-  }
-  async function sendBack(note: string) {
-    const ok = await persist("returned", note);
-    if (ok) {
-      setReturnOpen(false);
-      flash("أُرجع للمدرب مع الملاحظة");
+  async function makeSheet() {
+    if (!drillId || dirty) {
+      const ok = await persist();
+      if (!ok) return;
     }
+    const idNow = drillId ?? new URL(window.location.href).pathname.split("/").pop();
+    router.push(`/sheets/new?drawing=${idNow}`);
   }
   async function remove() {
     if (!drillId) return;
@@ -201,18 +189,7 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
   }
 
   /* ---------- ui bits ---------- */
-  const statusChip = drillId ? (
-    <span
-      className={clsx(
-        "chip shrink-0 hidden sm:inline-flex",
-        status === "approved" ? "bg-ice/20 text-ice" : status === "pending" ? "bg-gold/20 text-gold" : status === "returned" ? "bg-error/25 text-[#ff9b9b]" : "bg-white/10 text-silver",
-      )}
-    >
-      {STATUS_LABEL[status]}
-    </span>
-  ) : (
-    <span className="chip shrink-0 hidden sm:inline-flex bg-white/10 text-silver">جديد</span>
-  );
+  const statusChip = <span className="chip shrink-0 hidden sm:inline-flex bg-white/10 text-silver">{drillId ? "رسم" : "رسم جديد"}</span>;
 
   const title = (
     <>
@@ -232,9 +209,7 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
     </>
   );
 
-  const canSubmit = !me.canApprove && canEdit && (status === "draft" || status === "returned");
-  const canApproveNow = me.canApprove && canEdit && status !== "approved";
-  const canAddToCalendar = me.canCalendar && !!drillId && status === "approved";
+  const canAddToCalendar = me.canCalendar && !!drillId;
 
   const actions = (
     <div className="flex items-center gap-1.5">
@@ -248,14 +223,9 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
           <Check size={17} /> {saving ? "جارٍ…" : "حفظ"}
         </button>
       )}
-      {canSubmit && (
-        <button type="button" onClick={() => submit()} disabled={saving} className="hidden md:inline-flex h-10 px-3.5 rounded-xl font-bold text-[13.5px] items-center gap-1.5 bg-gold text-navy-900 disabled:opacity-60">
-          <Send size={16} /> إرسال للاعتماد
-        </button>
-      )}
-      {canApproveNow && drillId && status !== "draft" && (
-        <button type="button" onClick={() => approve()} disabled={saving} className="hidden md:inline-flex h-10 px-3.5 rounded-xl font-bold text-[13.5px] items-center gap-1.5 bg-gold text-navy-900 disabled:opacity-60">
-          <BadgeCheck size={17} /> اعتماد
+      {me.canDraw && (
+        <button type="button" onClick={makeSheet} disabled={saving} className="hidden md:inline-flex h-10 px-3.5 rounded-xl font-bold text-[13.5px] items-center gap-1.5 bg-gold text-navy-900 disabled:opacity-60" title="يحفظ الرسم ويفتح ورقة تمرين فيها هذا الرسم">
+          <FileText size={16} /> إنشاء ورقة من هذا الرسم
         </button>
       )}
       <div className="relative">
@@ -269,24 +239,9 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
               <MenuItem icon={<Info size={17} />} onClick={() => { setMenuOpen(false); setDetailsOpen(true); }}>
                 بيانات التمرين
               </MenuItem>
-              {canSubmit && (
-                <MenuItem icon={<Send size={17} />} onClick={() => { setMenuOpen(false); submit(); }}>
-                  إرسال للاعتماد
-                </MenuItem>
-              )}
-              {canApproveNow && (
-                <MenuItem icon={<BadgeCheck size={17} />} onClick={() => { setMenuOpen(false); approve(); }}>
-                  {status === "draft" || !drillId ? "حفظ في المكتبة" : "اعتماد"}
-                </MenuItem>
-              )}
-              {me.canApprove && canEdit && !drillId && (
-                <MenuItem icon={<FilePen size={17} />} onClick={() => { setMenuOpen(false); saveDraft(); }}>
-                  حفظ كمسودة
-                </MenuItem>
-              )}
-              {me.canApprove && drillId && status === "pending" && (
-                <MenuItem icon={<Undo2 size={17} />} onClick={() => { setMenuOpen(false); setReturnOpen(true); }}>
-                  إرجاع للتعديل
+              {me.canDraw && (
+                <MenuItem icon={<FileText size={17} />} onClick={() => { setMenuOpen(false); makeSheet(); }}>
+                  إنشاء ورقة من هذا الرسم
                 </MenuItem>
               )}
               {canAddToCalendar && (
@@ -299,7 +254,7 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
                   نسخة جديدة منه
                 </MenuItem>
               )}
-              {drillId && ((isAuthor && status !== "approved") || me.isOwner) && (
+              {drillId && (isAuthor || me.isOwner) && (
                 <MenuItem icon={<Trash2 size={17} />} danger onClick={() => { setMenuOpen(false); remove(); }}>
                   حذف التمرين
                 </MenuItem>
@@ -335,41 +290,12 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
         </button>
       </Banner>
     );
-  } else if (drillId && status === "pending" && me.canApprove && !isAuthor) {
-    banner = (
-      <Banner tone="gold">
-        <span className="flex-1">
-          بانتظار اعتمادك{authorName ? ` — أرسله ${authorName}` : ""}. تقدر تعدّل عليه قبل الاعتماد.
-        </span>
-        <button type="button" onClick={() => approve()} className="h-8 px-3 rounded-lg bg-navy-900 text-white font-bold text-[12.5px] inline-flex items-center gap-1">
-          <BadgeCheck size={15} /> اعتماد
-        </button>
-        <button type="button" onClick={() => setReturnOpen(true)} className="h-8 px-3 rounded-lg bg-white/60 text-navy-900 font-bold text-[12.5px]">
-          إرجاع
-        </button>
-      </Banner>
-    );
-  } else if (drillId && status === "pending" && isAuthor && !me.canApprove) {
-    banner = <Banner tone="ice">أُرسل للاعتماد — بانتظار المالك أو مدير الفرع. تقدر تكمل تعديل.</Banner>;
-  } else if (drillId && status === "returned" && isAuthor) {
-    banner = (
-      <Banner tone="error">
-        <span className="flex-1">
-          أُرجع للتعديل{reviewerName ? ` من ${reviewerName}` : ""}: <b>{reviewNote || "بدون ملاحظة"}</b>
-        </span>
-        {canSubmit && (
-          <button type="button" onClick={() => submit()} className="h-8 px-3 rounded-lg bg-navy-900 text-white font-bold text-[12.5px] inline-flex items-center gap-1 shrink-0">
-            <Send size={14} /> إرسال مرة ثانية
-          </button>
-        )}
-      </Banner>
-    );
   }
 
   const info = (
     <DrillInfo
       meta={meta}
-      status={drillId ? status : null}
+      status={null}
       authorName={authorName}
       onCalendar={canAddToCalendar ? () => setCalOpen(true) : undefined}
       onDuplicate={me.canDraw && drillId ? () => router.push(`/drills/new?from=${drillId}`) : undefined}
@@ -423,14 +349,11 @@ export default function DrillStudio({ drill, source, me, authorName, reviewerNam
           scheduleBackup(m);
           const next = afterDetails;
           setAfterDetails(null);
-          if (next === "submit") submit(m);
-          else if (next === "approve") approve(m);
-          else if (next === "save") save(m);
+          if (next === "save") save(m);
         }}
-        saveLabel={afterDetails === "submit" ? "حفظ وإرسال للاعتماد" : afterDetails ? "حفظ التمرين" : !drillId ? "حفظ التمرين" : "تم"}
+        saveLabel={afterDetails ? "حفظ الرسم" : !drillId ? "حفظ الرسم" : "تم"}
       />
 
-      <ReturnModal open={returnOpen} onClose={() => setReturnOpen(false)} onSend={sendBack} />
 
       {drillId && (
         <AddToCalendarModal
@@ -641,34 +564,6 @@ function Chips({ options, value, onChange, disabled, num }: { options: string[];
   );
 }
 
-function ReturnModal({ open, onClose, onSend }: { open: boolean; onClose: () => void; onSend: (note: string) => void }) {
-  return open ? <ReturnForm onClose={onClose} onSend={onSend} /> : null;
-}
-
-function ReturnForm({ onClose, onSend }: { onClose: () => void; onSend: (note: string) => void }) {
-  const [note, setNote] = useState("");
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title="إرجاع التمرين للتعديل"
-      footer={
-        <>
-          <button type="button" className="btn-ghost" onClick={onClose}>
-            إلغاء
-          </button>
-          <button type="button" className="btn-primary" onClick={() => onSend(note.trim())} disabled={!note.trim()}>
-            <Undo2 size={16} /> إرجاع
-          </button>
-        </>
-      }
-    >
-      <Field label="الملاحظة للمدرب">
-        <textarea className="field min-h-[110px]" value={note} onChange={(e) => setNote(e.target.value)} placeholder="مثال: كبّر المساحة إلى 25×30 وخلّ كل لاعب معه كرة" autoFocus />
-      </Field>
-    </Modal>
-  );
-}
 
 /* ---------- add a drill to the training calendar ---------- */
 

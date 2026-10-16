@@ -7,27 +7,40 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, ArrowUp, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, BadgeCheck, PenTool, Plus, Printer, RefreshCw, Save, Send, Trash2, Undo2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/confirm";
-import { fmtDate, KIND_LABEL, lines, newDrill, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, totalMinutes, type DrillSheet, type SheetDrill, type SheetKind } from "@/lib/sheets";
+import { Modal } from "@/components/ui";
+import { BoardStatic } from "@/components/drills/render";
+import { exportBoardPlainPng } from "@/components/drills/export";
+import { boardDims, parseBoard } from "@/lib/drills/board";
+import type { Board } from "@/lib/drills/types";
+import { fmtDate, KIND_LABEL, lines, newDrill, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type SheetDrill, type SheetKind, type SheetStatus } from "@/lib/sheets";
 import "./sheet.css";
 
-export type SheetMe = { id: string; name: string; canDelete: boolean };
+export type SheetMe = { id: string; name: string; canApprove: boolean; isOwner: boolean };
+
+/** a drawing from the studio (drills table) */
+export type Drawing = { id: string; title: string; board: unknown; updated_at?: string };
 
 type Props = {
   sheet: DrillSheet | null;
   me: SheetMe;
   authorName?: string;
+  reviewerName?: string;
   today: string;
   /** opened with ?kind=session */
   initialKind?: SheetKind;
+  /** opened from the library on a given drill of a session */
+  initialActive?: number;
+  /** opened from the studio: "إنشاء ورقة من هذا الرسم" */
+  fromDrawing?: Drawing | null;
 };
 
 const DIAGRAM_MAX = 1600;
 const BUCKET = "drill-sheets";
 
-export default function SheetBuilder({ sheet, me, authorName, today, initialKind }: Props) {
+export default function SheetBuilder({ sheet, me, authorName, reviewerName, today, initialKind, initialActive, fromDrawing }: Props) {
   const router = useRouter();
   const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
@@ -37,16 +50,33 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
   const [title, setTitle] = useState(sheet?.title ?? "");
   const [date, setDate] = useState(sheet?.session_date ?? today);
   const [ageGroup, setAgeGroup] = useState(sheet?.age_group ?? SHEET_AGES[0]);
-  const [drills, setDrills] = useState<SheetDrill[]>(sheet?.drills?.length ? sheet.drills : [newDrill()]);
-  const [active, setActive] = useState(0);
-  const [dirty, setDirty] = useState(false);
+  const [drills, setDrills] = useState<SheetDrill[]>(() => {
+    if (sheet?.drills?.length) return sheet.drills;
+    const d = newDrill();
+    if (fromDrawing) {
+      d.title = fromDrawing.title;
+      d.drill_id = fromDrawing.id;
+    }
+    return [d];
+  });
+  const [active, setActive] = useState(Math.max(0, Math.min(initialActive ?? 0, (sheet?.drills?.length ?? 1) - 1)));
+  const [status, setStatus] = useState<SheetStatus>(sheet?.status ?? "draft");
+  const [reviewNote, setReviewNote] = useState(sheet?.review_note ?? "");
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [rendering, setRendering] = useState<{ board: Board; drillId: string; index: number } | null>(null);
+  const renderRef = useRef<HTMLDivElement>(null);
+  const [dirty, setDirty] = useState(!!fromDrawing);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [over, setOver] = useState(false);
   const [toast, setToast] = useState<{ text: string; tone?: "ok" | "err" } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const coach = authorName || me.name;
-  const readOnly = !!sheet && sheet.author_id !== me.id && !me.canDelete;
+  const isAuthor = !sheet || sheet.author_id === me.id;
+  // mirrors the SQL policies: coaches edit their own until approved; approvers edit anything submitted (or their own)
+  const canEdit = !sheet ? true : me.canApprove ? status !== "draft" || isAuthor : isAuthor && status !== "approved";
+  const readOnly = !canEdit;
 
   const cur = drills[Math.min(active, drills.length - 1)];
 
@@ -149,6 +179,60 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+  /* render a studio drawing (SVG) → PNG → storage → diagram of drill `index` */
+  useEffect(() => {
+    if (!rendering) return;
+    const host = renderRef.current;
+    const svg = host?.querySelector("svg");
+    if (!svg) return;
+    let cancelled = false;
+    (async () => {
+      setUploading(true);
+      try {
+        const { W, H } = boardDims(rendering.board);
+        const blob = await exportBoardPlainPng(svg, W, H);
+        if (!blob) throw new Error("render");
+        const path = `${me.id}/${crypto.randomUUID()}.png`;
+        const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: "image/png", upsert: false });
+        if (error) throw error;
+        const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+        if (cancelled) return;
+        setDrills((a) => a.map((d, i) => (i === rendering.index ? { ...d, img: data.publicUrl, drill_id: rendering.drillId } : d)));
+        setDirty(true);
+      } catch {
+        if (!cancelled) flash("تعذّر تحويل الرسم إلى صورة", "err");
+      } finally {
+        if (!cancelled) {
+          setUploading(false);
+          setRendering(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rendering]);
+
+  // opened from the studio: render that drawing straight into the first drill
+  const [rendering0] = useState(() => (fromDrawing && !sheet ? { board: parseBoard(fromDrawing.board), drillId: fromDrawing.id, index: 0 } : null));
+  useEffect(() => {
+    if (rendering0) queueMicrotask(() => setRendering(rendering0));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function useDrawing(d: Drawing) {
+    setPickOpen(false);
+    setRendering({ board: parseBoard(d.board), drillId: d.id, index: active });
+    if (!cur.title) patch({ title: d.title });
+  }
+  async function refreshFromDrawing() {
+    if (!cur.drill_id) return;
+    const { data } = await supabase.from("drills").select("id, title, board").eq("id", cur.drill_id).maybeSingle();
+    if (!data) return flash("الرسم ما عاد موجود", "err");
+    setRendering({ board: parseBoard(data.board), drillId: data.id, index: active });
+  }
+
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const it = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith("image/"));
@@ -165,11 +249,18 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
   }
 
   /* ---------- persistence ---------- */
-  async function save(): Promise<boolean> {
+  async function persist(nextStatus?: SheetStatus, note?: string): Promise<boolean> {
     const sheetTitle = (kind === "session" ? title : drills[0].title).trim();
     if (!sheetTitle) {
       flash(kind === "session" ? "اكتب اسم الحصة أولاً" : "اكتب اسم التمرين أولاً", "err");
       return false;
+    }
+    if (nextStatus === "pending" || nextStatus === "approved") {
+      const missing = drills.find((d) => !d.title.trim());
+      if (missing) {
+        flash("كل تمرين يحتاج اسماً قبل الإرسال", "err");
+        return false;
+      }
     }
     setSaving(true);
     const payload = {
@@ -178,8 +269,12 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
       session_date: date || null,
       age_group: kind === "session" ? ageGroup : drills[0].age,
       drills: drills.map((d) => ({ ...d, title: d.title.trim() })),
+      ...(nextStatus ? { status: nextStatus } : {}),
+      ...(note !== undefined ? { review_note: note } : {}),
     };
-    const res = id ? await supabase.from("drill_sheets").update(payload).eq("id", id).select("id").single() : await supabase.from("drill_sheets").insert(payload).select("id").single();
+    const res = id
+      ? await supabase.from("drill_sheets").update(payload).eq("id", id).select("id, status, review_note").single()
+      : await supabase.from("drill_sheets").insert({ ...payload, status: nextStatus ?? "draft" }).select("id, status, review_note").single();
     setSaving(false);
     if (res.error || !res.data) {
       flash("تعذّر الحفظ — تحقق من الاتصال", "err");
@@ -187,10 +282,32 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
     }
     const wasNew = !id;
     setId(res.data.id);
+    setStatus(res.data.status as SheetStatus);
+    setReviewNote(res.data.review_note ?? "");
     setDirty(false);
     if (wasNew) window.history.replaceState(null, "", `/sheets/${res.data.id}`);
-    flash("تم الحفظ");
     return true;
+  }
+  async function save() {
+    if (readOnly || saving) return;
+    // a new sheet by an approver goes straight to the library; everything else keeps its status
+    const ok = await persist(!id && me.canApprove ? "approved" : undefined);
+    if (ok) flash(status === "approved" || (!id && me.canApprove) ? "تم الحفظ في المكتبة" : "تم الحفظ");
+  }
+  async function submit() {
+    const ok = await persist("pending");
+    if (ok) flash("أُرسل للاعتماد");
+  }
+  async function approve() {
+    const ok = await persist("approved");
+    if (ok) flash("اعتُمد وأُضيف للمكتبة");
+  }
+  async function sendBack(note: string) {
+    const ok = await persist("returned", note);
+    if (ok) {
+      setReturnOpen(false);
+      flash("أُرجع للمدرب مع الملاحظة");
+    }
   }
   async function remove() {
     if (!id) return;
@@ -198,7 +315,7 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
     const { error } = await supabase.from("drill_sheets").delete().eq("id", id);
     if (error) return flash("تعذّر الحذف", "err");
     setDirty(false);
-    router.push("/sheets");
+    router.push("/drills");
   }
   async function reset() {
     if (!(await confirm({ title: "مسح كل البيانات والبدء من جديد؟", confirmText: "مسح", danger: true }))) return;
@@ -211,7 +328,7 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
   async function leave() {
     if (dirty && !(await confirm({ title: "تغييرات غير محفوظة", message: "تبي تطلع بدون حفظ؟ بتضيع آخر التعديلات.", confirmText: "خروج بدون حفظ" }))) return;
     setDirty(false);
-    router.push("/sheets");
+    router.push("/drills");
   }
   function exportPdf() {
     const t = kind === "session" ? title : drills[0].title;
@@ -219,6 +336,41 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
     document.title = `${drills[0].code ? drills[0].code + " — " : ""}${t || "STRIKE"}`;
     window.print();
     window.setTimeout(() => (document.title = prev), 1000);
+  }
+
+  const canSubmit = !me.canApprove && canEdit && (status === "draft" || status === "returned") && !!id;
+  const canApproveNow = me.canApprove && canEdit && !!id && (status === "pending" || status === "returned" || (status === "draft" && isAuthor));
+
+  let banner: React.ReactNode = null;
+  if (id && status === "pending" && me.canApprove && !isAuthor) {
+    banner = (
+      <div className="ds-banner gold" data-print-hide>
+        <span className="grow">بانتظار اعتمادك{authorName ? ` — أرسلها ${authorName}` : ""}. تقدر تعدّل عليها قبل الاعتماد.</span>
+        <button type="button" className="ds-btn" onClick={approve}>
+          <BadgeCheck size={15} /> اعتماد
+        </button>
+        <button type="button" className="ds-btn sub" onClick={() => setReturnOpen(true)}>
+          <Undo2 size={15} /> إرجاع
+        </button>
+      </div>
+    );
+  } else if (id && status === "pending" && isAuthor && !me.canApprove) {
+    banner = <div className="ds-banner ice" data-print-hide>أُرسلت للاعتماد — بانتظار المالك أو مدير الفرع. تقدر تكمل تعديل.</div>;
+  } else if (id && status === "returned" && isAuthor) {
+    banner = (
+      <div className="ds-banner error" data-print-hide>
+        <span className="grow">
+          أُرجعت للتعديل{reviewerName ? ` من ${reviewerName}` : ""}: <b>{reviewNote || "بدون ملاحظة"}</b>
+        </span>
+        {canSubmit && (
+          <button type="button" className="ds-btn" onClick={submit}>
+            <Send size={15} /> إرسال مرة ثانية
+          </button>
+        )}
+      </div>
+    );
+  } else if (id && status === "approved" && !me.canApprove) {
+    banner = <div className="ds-banner ice" data-print-hide>هذه الورقة في مكتبة التمارين. التعديل بعد الاعتماد يكون من المالك أو مدير الفرع.</div>;
   }
 
   const pages: React.ReactNode[] = [];
@@ -244,16 +396,29 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
             </button>
           ))}
         </div>
+        {id && <span className={clsx("ds-status", status)}>{SHEET_STATUS_LABEL[status]}</span>}
         <span className="spacer" />
         {!readOnly && (
           <button type="button" className="ds-btn" onClick={save} disabled={saving}>
-            <Save size={16} /> {saving ? "جارٍ الحفظ…" : "حفظ"}
+            <Save size={16} /> {saving ? "جارٍ الحفظ…" : !id && me.canApprove ? "حفظ في المكتبة" : "حفظ"}
+          </button>
+        )}
+        {canSubmit && (
+          <button type="button" className="ds-btn gold" onClick={submit} disabled={saving}>
+            <Send size={16} /> إرسال للاعتماد
+          </button>
+        )}
+        {canApproveNow && (
+          <button type="button" className="ds-btn gold" onClick={approve} disabled={saving}>
+            <BadgeCheck size={16} /> اعتماد
           </button>
         )}
         <button type="button" className="ds-btn ice" onClick={exportPdf}>
           <Printer size={16} /> تصدير PDF
         </button>
       </header>
+
+      {banner}
 
       <div className="ds-workspace">
         <aside className="ds-editor" aria-label="محرر التمرين">
@@ -394,11 +559,26 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
               <img className="thumb" src={cur.img} alt="" />
             )}
           </label>
-          {cur.img && !readOnly && (
+          {!readOnly && (
             <div className="ds-imgtools">
-              <button type="button" className="ds-btn" onClick={() => patch({ img: "" })}>
-                حذف الصورة
+              <button type="button" className="ds-btn" onClick={() => setPickOpen(true)} disabled={uploading}>
+                <PenTool size={14} /> اختر من رسوماتي
               </button>
+              {cur.drill_id && (
+                <>
+                  <button type="button" className="ds-btn" onClick={refreshFromDrawing} disabled={uploading} title="إعادة توليد الصورة من آخر نسخة من الرسم">
+                    <RefreshCw size={14} /> تحديث من الرسم
+                  </button>
+                  <a className="ds-btn" href={`/drills/${cur.drill_id}`} target="_blank" rel="noreferrer">
+                    تعديل الرسم
+                  </a>
+                </>
+              )}
+              {cur.img && (
+                <button type="button" className="ds-btn" onClick={() => patch({ img: "", drill_id: null })}>
+                  حذف الصورة
+                </button>
+              )}
             </div>
           )}
 
@@ -435,7 +615,22 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
           <div className="actions">
             {!readOnly && (
               <button type="button" className="ds-btn" onClick={save} disabled={saving}>
-                <Save size={16} /> {saving ? "جارٍ الحفظ…" : "حفظ الورقة"}
+                <Save size={16} /> {saving ? "جارٍ الحفظ…" : !id && me.canApprove ? "حفظ في المكتبة" : "حفظ الورقة"}
+              </button>
+            )}
+            {!readOnly && !me.canApprove && (
+              <button type="button" className="ds-btn gold" onClick={submit} disabled={saving || status === "pending"}>
+                <Send size={16} /> {status === "pending" ? "أُرسلت للاعتماد" : "حفظ وإرسال للاعتماد"}
+              </button>
+            )}
+            {canApproveNow && (
+              <button type="button" className="ds-btn gold" onClick={approve} disabled={saving}>
+                <BadgeCheck size={16} /> اعتماد وإضافة للمكتبة
+              </button>
+            )}
+            {me.canApprove && id && status === "pending" && (
+              <button type="button" className="ds-btn sub" onClick={() => setReturnOpen(true)}>
+                <Undo2 size={16} /> إرجاع للتعديل بملاحظة
               </button>
             )}
             <button type="button" className="ds-btn ice" onClick={exportPdf}>
@@ -446,7 +641,7 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
                 مسح الكل
               </button>
             )}
-            {id && (me.canDelete || sheet?.author_id === me.id) && (
+            {id && ((isAuthor && status !== "approved") || me.isOwner) && (
               <button type="button" className="ds-btn danger" onClick={remove}>
                 <Trash2 size={16} /> حذف الورقة
               </button>
@@ -462,6 +657,17 @@ export default function SheetBuilder({ sheet, me, authorName, today, initialKind
           ))}
         </main>
       </div>
+
+      {/* off-screen host: a drawing is rendered here as SVG, then rasterised into the diagram */}
+      <div ref={renderRef} aria-hidden style={{ position: "fixed", left: -20000, top: 0, width: 1400, pointerEvents: "none" }}>
+        {rendering && <BoardStatic board={rendering.board} className="w-full h-auto" />}
+      </div>
+
+      <DrawingPicker open={pickOpen} onClose={() => setPickOpen(false)} onPick={useDrawing} />
+
+      <Modal open={returnOpen} onClose={() => setReturnOpen(false)} title="إرجاع الورقة للتعديل">
+        <ReturnForm onClose={() => setReturnOpen(false)} onSend={sendBack} />
+      </Modal>
 
       {toast && (
         <div role="status" className={clsx("fixed z-[80] left-1/2 -translate-x-1/2 top-[calc(64px+env(safe-area-inset-top))] rounded-full px-4 py-2 text-[13px] font-bold shadow-[var(--shadow-pop)] fade-up whitespace-nowrap", toast.tone === "err" ? "bg-error text-white" : "bg-ice text-navy-900")}>
@@ -682,6 +888,78 @@ export function CoverPage({ title, date, age, coach, drills }: { title: string; 
       </div>
       <Foot coach={coach} />
     </article>
+  );
+}
+
+/* ---------- choose a drawing from the studio ---------- */
+
+function DrawingPicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (d: Drawing) => void }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [list, setList] = useState<Drawing[] | null>(null);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    supabase
+      .from("drills")
+      .select("id, title, board, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(200)
+      .then(({ data }) => alive && setList((data ?? []) as Drawing[]));
+    return () => {
+      alive = false;
+      setList(null);
+    };
+  }, [open, supabase]);
+  const shown = (list ?? []).filter((d) => !q.trim() || d.title.includes(q.trim()));
+  return (
+    <Modal open={open} onClose={onClose} title="اختر رسماً من لوحة الرسم" wide>
+      <div className="grid gap-3">
+        <input className="field" placeholder="بحث باسم الرسم" value={q} onChange={(e) => setQ(e.target.value)} />
+        {list === null ? (
+          <div className="text-ink-2 text-sm py-6 text-center">جارٍ التحميل…</div>
+        ) : shown.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-navy font-extrabold">ما في رسومات بعد</div>
+            <p className="text-ink-2 text-sm mt-1">ارسم تمريناً أولاً من «رسم تمرين»، ثم اختره من هنا.</p>
+            <a href="/drills/new" className="btn-primary h-10 px-4 mt-3 inline-flex" target="_blank" rel="noreferrer">
+              <PenTool size={16} /> رسم تمرين
+            </a>
+          </div>
+        ) : (
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 max-h-[60vh] overflow-auto p-0.5">
+            {shown.map((d) => (
+              <button key={d.id} type="button" onClick={() => onPick(d)} className="card overflow-hidden text-start hover:border-ice transition">
+                <div className="aspect-[16/11] bg-navy-900">
+                  <BoardStatic board={parseBoard(d.board)} className="w-full h-full" title={d.title} />
+                </div>
+                <div className="p-2 text-[13px] font-bold text-navy truncate">{d.title || "بدون اسم"}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ReturnForm({ onClose, onSend }: { onClose: () => void; onSend: (note: string) => void }) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="grid gap-3">
+      <label className="grid gap-1.5">
+        <span className="text-sm font-bold text-navy">ملاحظة للمدرب</span>
+        <textarea className="field min-h-28" value={note} onChange={(e) => setNote(e.target.value)} placeholder="وش يحتاج يتعدل عشان تدخل المكتبة؟" />
+      </label>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="btn-outline" onClick={onClose}>
+          إلغاء
+        </button>
+        <button type="button" className="btn-primary" onClick={() => onSend(note.trim())} disabled={!note.trim()}>
+          <Undo2 size={16} /> إرجاع
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -763,3 +763,76 @@
     print-color-adjust: exact;
   }
 }
+
+/* ---------- approval flow ---------- */
+.ds-btn.gold {
+  background: var(--ds-gold);
+  color: #14213f;
+}
+.ds-btn.gold:hover {
+  background: #f0c553;
+}
+.ds-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ds-silver);
+}
+.ds-status.approved {
+  background: rgba(77, 168, 255, 0.2);
+  color: var(--ds-ice);
+}
+.ds-status.pending {
+  background: rgba(231, 181, 60, 0.2);
+  color: var(--ds-gold);
+}
+.ds-status.returned {
+  background: rgba(214, 69, 69, 0.25);
+  color: #ff9b9b;
+}
+.ds-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ds-silver);
+}
+.ds-banner .grow {
+  flex: 1;
+  min-width: 200px;
+}
+.ds-banner .ds-btn {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+.ds-banner.gold {
+  background: #fbf0d3;
+  color: #14213f;
+}
+.ds-banner.ice {
+  background: #e3f1ff;
+  color: var(--ds-navy);
+}
+.ds-banner.error {
+  background: #fbe4e4;
+  color: var(--ds-err);
+}
+.ds-banner.error .ds-btn {
+  background: var(--ds-navy);
+  color: #fff;
+}
+.ds-banner.gold .ds-btn {
+  background: var(--ds-navy);
+  color: #fff;
+}
+.ds-banner.gold .ds-btn.sub {
+  background: #fff;
+  color: var(--ds-navy);
+}
