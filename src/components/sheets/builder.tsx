@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, ArrowUp, BadgeCheck, PenTool, Plus, Printer, RefreshCw, Save, Send, Trash2, Trophy, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, BadgeCheck, Pencil, PenTool, Plus, Printer, RefreshCw, Save, Send, Trash2, Trophy, Undo2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/confirm";
 import { Modal } from "@/components/ui";
@@ -35,12 +35,14 @@ type Props = {
   initialActive?: number;
   /** opened from the studio: "إنشاء ورقة من هذا الرسم" */
   fromDrawing?: Drawing | null;
+  /** open read-only (library view); a small "تعديل" button switches to the editor */
+  initialView?: boolean;
 };
 
 const DIAGRAM_MAX = 1600;
 const BUCKET = "drill-sheets";
 
-export default function SheetBuilder({ sheet, me, authorName, reviewerName, today, initialKind, initialActive, fromDrawing }: Props) {
+export default function SheetBuilder({ sheet, me, authorName, reviewerName, today, initialKind, initialActive, fromDrawing, initialView }: Props) {
   const router = useRouter();
   const confirm = useConfirm();
   const supabase = useMemo(() => createClient(), []);
@@ -67,6 +69,7 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
   const [rendering, setRendering] = useState<{ board: Board; drillId: string; index: number } | null>(null);
   const renderRef = useRef<HTMLDivElement>(null);
   const [dirty, setDirty] = useState(!!fromDrawing);
+  const [viewing, setViewing] = useState(!!initialView && !!sheet);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [over, setOver] = useState(false);
@@ -97,6 +100,13 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!initialView || !initialActive) return;
+    const el = document.getElementById(`ds-page-${initialActive + (kind === "session" ? 1 : 0)}`);
+    el?.scrollIntoView({ block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -387,8 +397,9 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
         <button type="button" className="ds-btn ghost" onClick={leave} aria-label="رجوع" style={{ padding: "8px 10px" }}>
           <ArrowRight size={18} />
         </button>
-        <h1>إنشاء ورقة تمرين</h1>
+        <h1>{viewing ? (kind === "session" ? title || "حصة تدريبية" : drills[0]?.title || "ورقة تمرين") : "إنشاء ورقة تمرين"}</h1>
         <span className="en hidden sm:inline">DRILL SHEET</span>
+        {!viewing && (
         <div className="ds-seg" role="tablist" aria-label="نوع الورقة">
           {(["drill", "session"] as SheetKind[]).map((k) => (
             <button key={k} type="button" role="tab" aria-selected={kind === k} className={clsx(kind === k && "on")} onClick={() => switchKind(k)} disabled={readOnly}>
@@ -396,19 +407,25 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
             </button>
           ))}
         </div>
+        )}
         {id && <span className={clsx("ds-status", status)}>{SHEET_STATUS_LABEL[status]}</span>}
         <span className="spacer" />
-        {!readOnly && (
+        {viewing && canEdit && (
+          <button type="button" className="ds-btn ghost" onClick={() => setViewing(false)}>
+            <Pencil size={15} /> تعديل
+          </button>
+        )}
+        {!viewing && !readOnly && (
           <button type="button" className="ds-btn" onClick={save} disabled={saving}>
             <Save size={16} /> {saving ? "جارٍ الحفظ…" : !id && me.canApprove ? "حفظ في المكتبة" : "حفظ"}
           </button>
         )}
-        {canSubmit && (
+        {!viewing && canSubmit && (
           <button type="button" className="ds-btn gold" onClick={submit} disabled={saving}>
             <Send size={16} /> إرسال للاعتماد
           </button>
         )}
-        {canApproveNow && (
+        {!viewing && canApproveNow && (
           <button type="button" className="ds-btn gold" onClick={approve} disabled={saving}>
             <BadgeCheck size={16} /> اعتماد
           </button>
@@ -418,9 +435,10 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
         </button>
       </header>
 
-      {banner}
+      {!viewing && banner}
 
-      <div className="ds-workspace">
+      <div className={clsx("ds-workspace", viewing && "view")}>
+        {!viewing && (
         <aside className="ds-editor" aria-label="محرر التمرين">
           {kind === "session" && (
             <>
@@ -700,10 +718,11 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
             )}
           </div>
         </aside>
+        )}
 
         <main className="ds-preview-wrap" ref={wrapRef} style={{ ["--ds-scale" as string]: scale }}>
           {pages.map((p, i) => (
-            <div key={i} className="ds-page-scale">
+            <div key={i} id={`ds-page-${i}`} className="ds-page-scale">
               {p}
             </div>
           ))}

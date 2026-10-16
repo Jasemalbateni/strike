@@ -132,6 +132,16 @@
   }
 }
 
+.ds-workspace.view {
+  grid-template-columns: 1fr;
+}
+.ds-topbar h1 {
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- editor ---------- */
 .ds-editor {
   background: #fff;

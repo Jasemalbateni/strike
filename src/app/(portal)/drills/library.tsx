@@ -31,10 +31,11 @@ export default function DrillLibrary({ me, initialSheets, initialDrawings, staff
   const [age, setAge] = useState<string | null>(null);
   const [intensity, setIntensity] = useState<string | null>(null);
   const [sort, setSort] = useState<"new" | "title" | "code">("new");
+  const [scope, setScope] = useState<"drills" | "sessions">("drills");
   const [moreFilters, setMoreFilters] = useState(false);
   const [page, setPageRaw] = useState(1);
   // any filter change goes back to the first page
-  const filterKey = `${tab}|${q}|${cat}|${age}|${intensity}|${sort}`;
+  const filterKey = `${tab}|${q}|${cat}|${age}|${intensity}|${sort}|${scope}`;
   const [pageKey, setPageKey] = useState(filterKey);
   if (pageKey !== filterKey) {
     setPageKey(filterKey);
@@ -80,6 +81,10 @@ export default function DrillLibrary({ me, initialSheets, initialDrawings, staff
     .sort((a, b) => (sort === "title" ? a.drill.title.localeCompare(b.drill.title, "ar") : sort === "code" ? a.drill.code.localeCompare(b.drill.code) : b.sheet.updated_at.localeCompare(a.sheet.updated_at)));
   const cats = SHEET_CATEGORIES.filter((c) => library.some((x) => x.drill.cat === c));
   const filtersOn = !!(cat || age || intensity);
+  // "الحصص فقط": whole session sheets from the library
+  const sessionSheets = sheets
+    .filter((s) => s.status === "approved" && s.kind === "session" && (!age || s.age_group === age || s.age_group === "الكل") && (!needle || s.title.includes(needle) || normalizeDrills(s.drills).some((d) => d.title.includes(needle))))
+    .sort((a, b) => (sort === "title" ? a.title.localeCompare(b.title, "ar") : b.updated_at.localeCompare(a.updated_at)));
   const pageOf = <T,>(list: T[]) => list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const sheetList = (tab === "pending" ? pending : mine).filter((s) => !needle || s.title.includes(needle) || normalizeDrills(s.drills).some((d) => d.title.includes(needle)));
   const drawShown = drawings.filter((d) => !needle || d.title.includes(needle) || d.category.includes(needle));
@@ -137,6 +142,21 @@ export default function DrillLibrary({ me, initialSheets, initialDrawings, staff
           )}
         </label>
         {tab === "library" && (
+          <div className="inline-flex h-11 rounded-xl bg-white border border-silver-200 p-1 shrink-0">
+            {(
+              [
+                ["drills", "تمارين", <FileText key="d" size={15} />],
+                ["sessions", "حصص", <Layers key="s" size={15} />],
+              ] as const
+            ).map(([v, l, ic]) => (
+              <button key={v} type="button" onClick={() => setScope(v)} className={clsx("px-3 rounded-lg inline-flex items-center gap-1.5 text-[13.5px] font-bold", scope === v ? "bg-navy text-white" : "text-navy")}>
+                {ic} {l}
+                <span className={clsx("num text-[11.5px] min-w-5 h-5 px-1 rounded-full grid place-items-center", scope === v ? "bg-white/15" : "bg-silver-100 text-ink-2")}>{v === "drills" ? library.length : sheets.filter((x) => x.status === "approved" && x.kind === "session").length}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {tab === "library" && (
           <button type="button" onClick={() => setMoreFilters((v) => !v)} className={clsx("h-11 px-3.5 rounded-xl inline-flex items-center gap-2 text-[14px] font-bold shrink-0 border transition-colors", moreFilters || age || intensity ? "bg-navy text-white border-navy" : "bg-white border-silver-200 text-navy hover:border-ice")}>
             <SlidersHorizontal size={16} /> فلاتر
             {(age || intensity) && <span className="num text-[12px] min-w-5 h-5 px-1.5 rounded-full grid place-items-center bg-white/15">{[age, intensity].filter(Boolean).length}</span>}
@@ -144,7 +164,7 @@ export default function DrillLibrary({ me, initialSheets, initialDrawings, staff
         )}
       </div>
 
-      {tab === "library" && cats.length > 0 && (
+      {tab === "library" && scope === "drills" && cats.length > 0 && (
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 items-center mb-3">
           <button type="button" onClick={() => setCat(null)} className={clsx("chip h-9 px-3 text-[13px] shrink-0", !cat ? "bg-ice text-navy-900" : "bg-white border border-silver-200 text-navy")}>
             الكل <span className="num opacity-70">{library.length}</span>
@@ -204,7 +224,22 @@ export default function DrillLibrary({ me, initialSheets, initialDrawings, staff
         </div>
       )}
 
-      {tab === "library" &&
+      {tab === "library" && scope === "sessions" && (
+        sessionSheets.length === 0 ? (
+          <Empty title="ما في حصص كاملة بالمكتبة بعد" hint="أنشئ ورقة من نوع «حصة كاملة» واعتمدها، وتظهر هنا." cta="حصة كاملة" href="/sheets/new?kind=session" />
+        ) : (
+          <>
+            <Grid>
+              {pageOf(sessionSheets).map((s) => (
+                <SheetCard key={s.id} s={s} author={nameOf(s.author_id)} view />
+              ))}
+            </Grid>
+            <Pager total={sessionSheets.length} page={page} onPage={setPage} />
+          </>
+        )
+      )}
+
+      {tab === "library" && scope === "drills" &&
         (libShown.length === 0 ? (
           <Empty title="المكتبة فاضية" hint="أول ورقة تمرين تُعتمد تظهر هنا تحت محورها." cta="إنشاء ورقة تمرين" href="/sheets/new" />
         ) : (
@@ -318,7 +353,7 @@ function LibraryCard({ x, author }: { x: LibraryDrill; author: string }) {
   const { sheet, drill, index } = x;
   const n = normalizeDrills(sheet.drills).length;
   return (
-    <Link href={`/sheets/${sheet.id}?d=${index}`} className="card group overflow-hidden flex flex-col hover:border-ice transition">
+    <Link href={`/sheets/${sheet.id}?d=${index}&view=1`} className="card group overflow-hidden flex flex-col hover:border-ice transition">
       <Thumb src={drill.img} fallback={<FileText size={40} className="text-navy/30" />} />
       {sheet.kind === "session" && (
         <span className="absolute top-2 left-2 chip bg-navy-900/85 text-white text-[11px]">
@@ -354,11 +389,11 @@ function LibraryCard({ x, author }: { x: LibraryDrill; author: string }) {
 }
 
 /** a whole sheet (pending / drafts) */
-function SheetCard({ s, author }: { s: DrillSheet; author: string }) {
+function SheetCard({ s, author, view }: { s: DrillSheet; author: string; view?: boolean }) {
   const drills = normalizeDrills(s.drills);
   const mins = totalMinutes(drills);
   return (
-    <Link href={`/sheets/${s.id}`} className="card group overflow-hidden flex flex-col hover:border-ice transition relative">
+    <Link href={view ? `/sheets/${s.id}?view=1` : `/sheets/${s.id}`} className="card group overflow-hidden flex flex-col hover:border-ice transition relative">
       <Thumb src={drills.find((d) => d.img)?.img} fallback={<FileText size={40} className="text-navy/30" />} />
       <span className={clsx("absolute top-2 right-2 chip text-[11px]", SHEET_STATUS_CHIP[s.status])}>{SHEET_STATUS_LABEL[s.status]}</span>
       {s.kind === "session" && (

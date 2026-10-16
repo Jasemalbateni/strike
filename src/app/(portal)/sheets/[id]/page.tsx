@@ -29,6 +29,7 @@ export default async function SheetPage(props: PageProps<"/sheets/[id]">) {
       reviewerName={nameOf(sheet.reviewed_by)}
       today={todayKW()}
       initialActive={Number.isFinite(d) ? d : 0}
+      initialView={sp.view === "1"}
     />
   );
 }
