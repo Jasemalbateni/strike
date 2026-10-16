@@ -836,3 +836,65 @@
   background: #fff;
   color: var(--ds-navy);
 }
+
+/* ---------- match page ---------- */
+.ds-add.gold {
+  border-color: #f2dc9c;
+  background: #fbf0d3;
+  color: #14213f;
+}
+.ds-add.gold:hover {
+  border-color: var(--ds-gold);
+  background: #f7e6b8;
+}
+.ds-match-hero {
+  background: var(--ds-navy);
+  color: #fff;
+  border-radius: 2mm;
+  min-height: 42mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2mm;
+  position: relative;
+  overflow: hidden;
+}
+.ds-match-hero::before {
+  content: "";
+  position: absolute;
+  inset: 4mm;
+  border: 0.6pt solid rgba(255, 255, 255, 0.25);
+  border-radius: 1.5mm;
+}
+.ds-match-hero::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 4mm;
+  bottom: 4mm;
+  border-left: 0.6pt solid rgba(255, 255, 255, 0.25);
+}
+.ds-match-hero .fmt {
+  font-size: 34pt;
+  font-weight: 700;
+  color: var(--ds-gold);
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+  background: var(--ds-navy);
+  padding: 0 4mm;
+}
+.ds-match-hero .sub {
+  font-size: 11pt;
+  color: var(--ds-silver);
+  position: relative;
+  z-index: 1;
+  background: var(--ds-navy);
+  padding: 0 3mm;
+}
+.ds-notes {
+  background: var(--ds-zebra);
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+}

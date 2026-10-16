@@ -3,8 +3,15 @@
 
 export type SheetKind = "drill" | "session";
 
+/** an item of a sheet: a drill, or (inside a session) a match */
+export type SheetItemType = "drill" | "match";
+
 export type SheetDrill = {
   id: string;
+  /** defaults to "drill" for rows stored before matches existed */
+  type?: SheetItemType;
+  /** match format, e.g. "3 ضد 3" (matches only) */
+  format?: string;
   title: string;
   code: string;
   cat: string;
@@ -62,8 +69,17 @@ export type LibraryDrill = { sheet: DrillSheet; index: number; drill: SheetDrill
 
 export function flattenLibrary(sheets: DrillSheet[]): LibraryDrill[] {
   const out: LibraryDrill[] = [];
-  for (const sheet of sheets) normalizeDrills(sheet.drills).forEach((drill, index) => out.push({ sheet, index, drill }));
+  // matches belong to their session, not to the drill library
+  for (const sheet of sheets) normalizeDrills(sheet.drills).forEach((drill, index) => !isMatch(drill) && out.push({ sheet, index, drill }));
   return out;
+}
+
+export const isMatch = (d: Pick<SheetDrill, "type">) => d.type === "match";
+
+export const MATCH_FORMATS = ["1 ضد 1", "2 ضد 2", "3 ضد 3", "4 ضد 4", "5 ضد 5", "أخرى"];
+
+export function newMatch(): SheetDrill {
+  return { ...newDrill(), type: "match", format: "3 ضد 3", title: "مباراة", cat: "ألعاب مصغّرة", intensity: "عالية" };
 }
 
 export const SHEET_CATEGORIES = ["تمرير واستقبال", "المراوغة والتحكم", "التسديد", "الدفاع 1v1", "ألعاب مصغّرة", "الإحماء", "التنسيق الحركي", "أخرى"];
@@ -90,6 +106,8 @@ export function newDrill(): SheetDrill {
     prog: "",
     img: "",
     drill_id: null,
+    type: "drill",
+    format: "",
   };
 }
 

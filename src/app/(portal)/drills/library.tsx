@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { BoardStatic } from "@/components/drills/render";
 import { parseBoard } from "@/lib/drills/board";
 import type { Drill } from "@/lib/drills/meta";
-import { flattenLibrary, normalizeDrills, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_CHIP, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type LibraryDrill } from "@/lib/sheets";
+import { flattenLibrary, isMatch, normalizeDrills, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_CHIP, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type LibraryDrill } from "@/lib/sheets";
 import type { StaffName } from "@/lib/types";
 import { bidi } from "@/lib/bidi";
 
@@ -363,7 +363,8 @@ function SheetCard({ s, author }: { s: DrillSheet; author: string }) {
       <span className={clsx("absolute top-2 right-2 chip text-[11px]", SHEET_STATUS_CHIP[s.status])}>{SHEET_STATUS_LABEL[s.status]}</span>
       {s.kind === "session" && (
         <span className="absolute top-2 left-2 chip bg-navy-900/85 text-white text-[11px]">
-          <Layers size={12} /> حصة · <span className="num">{drills.length}</span>
+          <Layers size={12} /> حصة · <span className="num">{drills.filter((d) => !isMatch(d)).length}</span>
+          {drills.some(isMatch) && <span>+ مباراة</span>}
         </span>
       )}
       <div className="p-3.5 flex-1 flex flex-col gap-1.5">

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowDown, ArrowRight, ArrowUp, BadgeCheck, PenTool, Plus, Printer, RefreshCw, Save, Send, Trash2, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, BadgeCheck, PenTool, Plus, Printer, RefreshCw, Save, Send, Trash2, Trophy, Undo2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/confirm";
 import { Modal } from "@/components/ui";
@@ -15,7 +15,7 @@ import { BoardStatic } from "@/components/drills/render";
 import { exportBoardPlainPng } from "@/components/drills/export";
 import { boardDims, parseBoard } from "@/lib/drills/board";
 import type { Board } from "@/lib/drills/types";
-import { fmtDate, KIND_LABEL, lines, newDrill, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type SheetDrill, type SheetKind, type SheetStatus } from "@/lib/sheets";
+import { fmtDate, isMatch, KIND_LABEL, lines, MATCH_FORMATS, newDrill, newMatch, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type SheetDrill, type SheetKind, type SheetStatus } from "@/lib/sheets";
 import "./sheet.css";
 
 export type SheetMe = { id: string; name: string; canApprove: boolean; isOwner: boolean };
@@ -117,15 +117,16 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
   function field<K extends keyof SheetDrill>(k: K) {
     return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => patch({ [k]: e.target.value } as Partial<SheetDrill>);
   }
-  function addDrill() {
+  function addDrill(match = false) {
     setDrills((a) => {
-      const d = newDrill();
+      const d = match ? newMatch() : newDrill();
       d.age = ageGroup;
       return [...a, d];
     });
     setActive(drills.length);
     setDirty(true);
   }
+  const curIsMatch = isMatch(cur);
   async function removeDrill(i: number) {
     if (drills.length <= 1) return;
     const d = drills[i];
@@ -150,7 +151,7 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
     if (k === "drill" && drills.length > 1) {
       confirm({ title: "التحويل إلى تمرين واحد", message: "يُحتفظ بالتمرين الأول فقط، وتُحذف بقية تمارين الحصة من هذه الورقة.", confirmText: "تحويل", danger: true }).then((ok) => {
         if (!ok) return;
-        setDrills((a) => [a[0]]);
+        setDrills((a) => [a.find((d) => !isMatch(d)) ?? newDrill()]);
         setActive(0);
         setKind("drill");
         setDirty(true);
@@ -375,11 +376,10 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
 
   const pages: React.ReactNode[] = [];
   if (kind === "session") pages.push(<CoverPage key="cover" title={title} date={date} age={ageGroup} coach={coach} drills={drills} />);
-  drills.forEach((d, i) =>
-    pages.push(
-      <DrillPage key={d.id} d={d} date={date} coach={coach} kicker={kind === "session" ? `${title || "حصة تدريبية"} · تمرين ${i + 1} من ${drills.length}` : `${d.cat} · فئة ${d.age}`} />,
-    ),
-  );
+  drills.forEach((d, i) => {
+    const kicker = kind === "session" ? `${title || "حصة تدريبية"} · ${isMatch(d) ? "مباراة" : "تمرين"} ${i + 1} من ${drills.length}` : `${d.cat} · فئة ${d.age}`;
+    pages.push(isMatch(d) ? <MatchPage key={d.id} d={d} date={date} coach={coach} kicker={kicker} /> : <DrillPage key={d.id} d={d} date={date} coach={coach} kicker={kicker} />);
+  });
 
   return (
     <div className="ds">
@@ -449,7 +449,8 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
                 {drills.map((d, i) => (
                   <div key={d.id} className={clsx("ds-drill-row", i === active && "on")} onClick={() => setActive(i)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setActive(i)}>
                     <span className="n">{i + 1}</span>
-                    <span className={clsx("t", !d.title && "empty")}>{d.title || "تمرين بدون اسم"}</span>
+                    {isMatch(d) && <Trophy size={14} style={{ color: "var(--ds-gold)", flex: "0 0 auto" }} />}
+                    <span className={clsx("t", !d.title && "empty")}>{isMatch(d) ? `${d.title || "مباراة"}${d.format ? ` · ${d.format}` : ""}` : d.title || "تمرين بدون اسم"}</span>
                     {d.dur && <span className="d num">{d.dur} د</span>}
                     {!readOnly && (
                       <>
@@ -468,35 +469,57 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
                 ))}
               </div>
               {!readOnly && (
-                <button type="button" className="ds-add" onClick={addDrill}>
-                  <Plus size={16} /> إضافة تمرين
-                </button>
+                <div className="ds-row">
+                  <button type="button" className="ds-add" onClick={() => addDrill(false)}>
+                    <Plus size={16} /> إضافة تمرين
+                  </button>
+                  <button type="button" className="ds-add gold" onClick={() => addDrill(true)}>
+                    <Trophy size={16} /> إضافة مباراة
+                  </button>
+                </div>
               )}
               <h2>
-                بيانات التمرين <span className="num">{active + 1}</span>
+                {curIsMatch ? "بيانات المباراة" : "بيانات التمرين"} <span className="num">{active + 1}</span>
               </h2>
             </>
           )}
           {kind === "drill" && <h2>بيانات التمرين</h2>}
 
           <div className="ds-field">
-            <label htmlFor="fTitle">اسم التمرين</label>
-            <input id="fTitle" value={cur.title} onChange={field("title")} placeholder="مثال: تمرير واستقبال بين الأقماع" readOnly={readOnly} />
+            <label htmlFor="fTitle">{curIsMatch ? "اسم المباراة" : "اسم التمرين"}</label>
+            <input id="fTitle" value={cur.title} onChange={field("title")} placeholder={curIsMatch ? "مثال: مباراة ختامية" : "مثال: تمرير واستقبال بين الأقماع"} readOnly={readOnly} />
           </div>
-          <div className="ds-row">
-            <div className="ds-field">
-              <label htmlFor="fCode">رمز التمرين</label>
-              <input id="fCode" className="en" dir="ltr" value={cur.code} onChange={field("code")} placeholder="PAS-01" readOnly={readOnly} />
+          {curIsMatch ? (
+            <div className="ds-row">
+              <div className="ds-field">
+                <label htmlFor="fFormat">الصيغة</label>
+                <select id="fFormat" value={MATCH_FORMATS.includes(cur.format ?? "") ? cur.format : "أخرى"} onChange={(e) => patch({ format: e.target.value === "أخرى" ? "" : e.target.value })} disabled={readOnly}>
+                  {MATCH_FORMATS.map((f) => (
+                    <option key={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fFormat2">صيغة مخصصة</label>
+                <input id="fFormat2" value={cur.format ?? ""} onChange={field("format")} placeholder="مثال: 3 ضد 3 + حارس" readOnly={readOnly} />
+              </div>
             </div>
-            <div className="ds-field">
-              <label htmlFor="fCat">المحور</label>
-              <select id="fCat" value={cur.cat} onChange={field("cat")} disabled={readOnly}>
-                {SHEET_CATEGORIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
+          ) : (
+            <div className="ds-row">
+              <div className="ds-field">
+                <label htmlFor="fCode">رمز التمرين</label>
+                <input id="fCode" className="en" dir="ltr" value={cur.code} onChange={field("code")} placeholder="PAS-01" readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fCat">المحور</label>
+                <select id="fCat" value={cur.cat} onChange={field("cat")} disabled={readOnly}>
+                  {SHEET_CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
           <div className="ds-row3">
             <div className="ds-field">
               <label htmlFor="fAge">الفئة</label>
@@ -583,27 +606,56 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
           )}
 
           <h2>المحتوى</h2>
-          <div className="ds-field">
-            <label htmlFor="fDesc">شرح التمرين (التنظيم وسير التمرين)</label>
-            <textarea id="fDesc" value={cur.desc} onChange={field("desc")} placeholder="يقف اللاعبون في ثلاثة أزواج بمسافة 10 م..." readOnly={readOnly} />
-          </div>
-          <div className="ds-field">
-            <label htmlFor="fObj">الأهداف</label>
-            <textarea id="fObj" value={cur.obj} onChange={field("obj")} placeholder="كل هدف في سطر" readOnly={readOnly} />
-            <div className="hint">كل سطر = نقطة</div>
-          </div>
-          <div className="ds-field">
-            <label htmlFor="fEq">الأدوات</label>
-            <textarea id="fEq" value={cur.eq} onChange={field("eq")} placeholder={"6 أقماع\n3 كرات"} readOnly={readOnly} />
-          </div>
-          <div className="ds-field">
-            <label htmlFor="fPts">النقاط الفنية</label>
-            <textarea id="fPts" value={cur.pts} onChange={field("pts")} placeholder={"زاوية القدم عند الاستقبال\nرفع الرأس قبل التمرير"} readOnly={readOnly} />
-          </div>
-          <div className="ds-field">
-            <label htmlFor="fProg">التدرّج والتعديلات (اختياري)</label>
-            <textarea id="fProg" value={cur.prog} onChange={field("prog")} placeholder={"أسهل: ...\nأصعب: ..."} readOnly={readOnly} />
-          </div>
+          {curIsMatch ? (
+            <>
+              <div className="ds-field">
+                <label htmlFor="fObj">الهدف من المباراة</label>
+                <textarea id="fObj" value={cur.obj} onChange={field("obj")} placeholder={"تطبيق التمرير تحت ضغط\nاتخاذ القرار بسرعة"} readOnly={readOnly} />
+                <div className="hint">كل سطر = نقطة</div>
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fPts">شروط المباراة</label>
+                <textarea id="fPts" value={cur.pts} onChange={field("pts")} placeholder={"الهدف يُحتسب بعد 3 تمريرات\nلمستان كحد أقصى\nبدون حارس"} readOnly={readOnly} />
+                <div className="hint">القيود اللي توجّه اللعب نحو الهدف (CLA)</div>
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fDesc">ملاحظات للمدرب</label>
+                <textarea id="fDesc" value={cur.desc} onChange={field("desc")} placeholder={"وش يراقب المدرب؟ متى يوقف اللعب؟ وش يسأل اللاعبين؟"} readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fEq">الأدوات</label>
+                <textarea id="fEq" value={cur.eq} onChange={field("eq")} placeholder={"مرميان صغيران\nصدريات لونين\n4 أقماع"} readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fProg">التدرّج والتعديلات (اختياري)</label>
+                <textarea id="fProg" value={cur.prog} onChange={field("prog")} placeholder={"أسهل: مساحة أكبر\nأصعب: لمسة واحدة"} readOnly={readOnly} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="ds-field">
+                <label htmlFor="fDesc">شرح التمرين (التنظيم وسير التمرين)</label>
+                <textarea id="fDesc" value={cur.desc} onChange={field("desc")} placeholder="يقف اللاعبون في ثلاثة أزواج بمسافة 10 م..." readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fObj">الأهداف</label>
+                <textarea id="fObj" value={cur.obj} onChange={field("obj")} placeholder="كل هدف في سطر" readOnly={readOnly} />
+                <div className="hint">كل سطر = نقطة</div>
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fEq">الأدوات</label>
+                <textarea id="fEq" value={cur.eq} onChange={field("eq")} placeholder={"6 أقماع\n3 كرات"} readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fPts">النقاط الفنية</label>
+                <textarea id="fPts" value={cur.pts} onChange={field("pts")} placeholder={"زاوية القدم عند الاستقبال\nرفع الرأس قبل التمرير"} readOnly={readOnly} />
+              </div>
+              <div className="ds-field">
+                <label htmlFor="fProg">التدرّج والتعديلات (اختياري)</label>
+                <textarea id="fProg" value={cur.prog} onChange={field("prog")} placeholder={"أسهل: ...\nأصعب: ..."} readOnly={readOnly} />
+              </div>
+            </>
+          )}
 
           <h2>التوقيع</h2>
           <div className="ds-field">
@@ -680,7 +732,7 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
 
 /* ---------- A4 pages ---------- */
 
-function Head({ kicker, title, code }: { kicker: string; title: string; code?: string }) {
+function Head({ kicker, title, code, label = "DRILL SHEET" }: { kicker: string; title: string; code?: string; label?: string }) {
   return (
     <>
       <header className="ds-sheet-head">
@@ -692,7 +744,7 @@ function Head({ kicker, title, code }: { kicker: string; title: string; code?: s
         </div>
         <div className="code">
           <span>{code || "—"}</span>
-          <small>DRILL SHEET</small>
+          <small>{label}</small>
         </div>
       </header>
       <div className="ds-accent" />
@@ -803,14 +855,16 @@ export function DrillPage({ d, date, coach, kicker }: { d: SheetDrill; date: str
 export function CoverPage({ title, date, age, coach, drills }: { title: string; date: string; age: string; coach: string; drills: SheetDrill[] }) {
   const total = totalMinutes(drills);
   const withImg = drills.filter((d) => d.img).slice(0, 6);
+  const nDrills = drills.filter((d) => !isMatch(d)).length;
+  const nMatches = drills.length - nDrills;
   return (
     <article className="ds-sheet">
-      <Head kicker={`حصة تدريبية · فئة ${age}`} title={title || "اسم الحصة"} code={`${drills.length} DRILLS`} />
+      <Head kicker={`حصة تدريبية · فئة ${age}`} title={title || "اسم الحصة"} code={`${nDrills} DRILLS${nMatches ? ` + ${nMatches} MATCH` : ""}`} />
       <div className="ds-sheet-body">
         <div className="ds-meta">
           <div>
-            <b>{drills.length}</b>
-            <span>تمرين</span>
+            <b>{nMatches ? `${nDrills}+${nMatches}` : nDrills}</b>
+            <span>{nMatches ? "تمرين + مباراة" : "تمرين"}</span>
           </div>
           <div>
             <b>{total || "—"}</b>
@@ -847,14 +901,17 @@ export function CoverPage({ title, date, age, coach, drills }: { title: string; 
                 <tr key={d.id}>
                   <td className="n">{i + 1}</td>
                   <td>
-                    <strong>{d.title || "تمرين بدون اسم"}</strong>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "1.5mm" }}>
+                      {isMatch(d) && <Trophy size={13} style={{ color: "var(--ds-gold)", flex: "0 0 auto" }} />}
+                      <strong>{isMatch(d) ? `${d.title || "مباراة"}${d.format ? ` ${d.format}` : ""}` : d.title || "تمرين بدون اسم"}</strong>
+                    </span>
                     {d.code && (
                       <span className="num" style={{ color: "var(--ds-ink-2)", fontSize: "10pt", marginInlineStart: "2mm" }}>
                         {d.code}
                       </span>
                     )}
                   </td>
-                  <td>{d.cat}</td>
+                  <td>{isMatch(d) ? "مباراة" : d.cat}</td>
                   <td>{d.intensity}</td>
                   <td className="num">{d.dur ? `${d.dur} د` : "—"}</td>
                 </tr>
@@ -885,6 +942,82 @@ export function CoverPage({ title, date, age, coach, drills }: { title: string; 
             </div>
           </section>
         )}
+      </div>
+      <Foot coach={coach} />
+    </article>
+  );
+}
+
+/** a match inside a session: format, goal, conditions (constraints), coach notes */
+export function MatchPage({ d, date, coach, kicker }: { d: SheetDrill; date: string; coach: string; kicker: string }) {
+  return (
+    <article className="ds-sheet">
+      <Head kicker={kicker} title={`${d.title || "مباراة"}${d.format ? ` — ${d.format}` : ""}`} code={d.format || "MATCH"} label="MATCH" />
+      <div className="ds-sheet-body">
+        <div className="ds-meta">
+          <div>
+            <b>{d.dur || "—"}</b>
+            <span>دقيقة</span>
+          </div>
+          <div>
+            <b>{d.players || "—"}</b>
+            <span>لاعب</span>
+          </div>
+          <div>
+            <b>{d.area || "—"}</b>
+            <span>متر</span>
+          </div>
+          <div>
+            <b className="ar">{d.intensity}</b>
+            <span>الشدة</span>
+          </div>
+          <div>
+            <b>{fmtDate(date)}</b>
+            <span>التاريخ</span>
+          </div>
+        </div>
+
+        {d.img ? (
+          <div className="ds-diagram">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={d.img} alt="رسم المباراة" />
+          </div>
+        ) : (
+          <div className="ds-match-hero">
+            <span className="fmt num">{d.format || "مباراة"}</span>
+            <span className="sub">{d.players ? `${d.players} لاعب` : ""}{d.players && d.area ? " · " : ""}{d.area ? `${d.area} م` : ""}</span>
+          </div>
+        )}
+
+        <div className="ds-cols">
+          <div>
+            <section className="ds-sec">
+              <h3>الهدف من المباراة</h3>
+              <List text={d.obj} />
+            </section>
+            <section className="ds-sec pts" style={{ marginTop: "4mm" }}>
+              <h3 className="gold">شروط المباراة</h3>
+              <List text={d.pts} />
+            </section>
+          </div>
+          <div>
+            <section className="ds-sec">
+              <h3>الأدوات</h3>
+              <List text={d.eq} />
+            </section>
+            {lines(d.prog).length > 0 && (
+              <section className="ds-sec" style={{ marginTop: "4mm" }}>
+                <h3>التدرّج والتعديلات</h3>
+                <List text={d.prog} />
+              </section>
+            )}
+          </div>
+        </div>
+
+        <section className="ds-sec ds-notes">
+          <h3>ملاحظات للمدرب</h3>
+          <p className={clsx(!d.desc && "none")}>{d.desc || "—"}</p>
+        </section>
       </div>
       <Foot coach={coach} />
     </article>
