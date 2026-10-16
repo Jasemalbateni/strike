@@ -474,7 +474,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
           convert={subForm.convert}
           branch={branchOf(subForm.player.branch_id) ?? branches[0]}
           latest={latestSub(subForm.player.id)}
-          lastAmount={subs[0]?.amount ?? 40}
+          lastAmount={subs[0]?.amount ?? 45}
           today={today}
           onClose={() => setSubForm(null)}
           onSaved={onSubSaved}
@@ -818,7 +818,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
   const [count, setCount] = useState(String(latest?.sessions_count ?? 12));
   const [endTouched, setEndTouched] = useState(false);
   const [endManual, setEndManual] = useState("");
-  const [amount, setAmount] = useState(String(latest?.amount ?? lastAmount));
+  const [amount, setAmount] = useState(String(lastAmount || latest?.amount || 45));
   const [paid, setPaid] = useState(true);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
