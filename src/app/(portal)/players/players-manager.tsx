@@ -8,6 +8,7 @@ import { AlertTriangle, Archive, ArchiveRestore, BadgeCheck, ClipboardCheck, Fla
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field, EmptyState } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
+import RenewalPanel from "@/components/players/renewals";
 import {
   SOURCES,
   SUB_LABEL,
@@ -317,6 +318,8 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
         <p className="text-ink-2 text-[11px] mt-3">تكلفة التسويق تُحسب من خانة «الإنفاق» في متابعة مركز التسويق ÷ التجارب اللي اشتركت بالفترة. تكلفة الملعب من إيجار الحصة المسجّل بالفرع.</p>
       </div>
 
+      <RenewalPanel players={players} subs={subs} today={today} className="order-3 md:order-1" />
+
       {/* filters + list */}
       <div className="order-1 md:order-2">
       <div className="flex flex-col gap-2 mb-3">
@@ -474,7 +477,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
           convert={subForm.convert}
           branch={branchOf(subForm.player.branch_id) ?? branches[0]}
           latest={latestSub(subForm.player.id)}
-          lastAmount={subs[0]?.amount ?? 45}
+          lastAmount={subs[0]?.amount ?? 40}
           today={today}
           onClose={() => setSubForm(null)}
           onSaved={onSubSaved}
@@ -818,7 +821,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
   const [count, setCount] = useState(String(latest?.sessions_count ?? 12));
   const [endTouched, setEndTouched] = useState(false);
   const [endManual, setEndManual] = useState("");
-  const [amount, setAmount] = useState(String(lastAmount || latest?.amount || 45));
+  const [amount, setAmount] = useState(String(latest?.amount ?? lastAmount));
   const [paid, setPaid] = useState(true);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
