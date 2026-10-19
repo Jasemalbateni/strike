@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Save, Trash2, TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { format, parseISO, startOfWeek } from "date-fns";
+import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { useHub } from "./store";
@@ -11,19 +11,27 @@ import { useConfirm } from "@/components/confirm";
 import { Field, PlatformSelect, PlatformChip, fmtNum, EmptyState } from "@/components/ui";
 import { PLATFORMS, platformLabel, metricLabel, type MetricRow, type Platform } from "@/lib/types";
 
-const WEEK_START = 6;
-type Key = "followers" | "reach" | "engagement" | "views" | "leads" | "spend";
-const KEYS: { key: Key; label: string; int: boolean }[] = [
-  { key: "followers", label: "المتابعين", int: true },
-  { key: "reach", label: "الوصول", int: true },
-  { key: "engagement", label: "التفاعل %", int: false },
-  { key: "views", label: "المشاهدات", int: true },
-  { key: "leads", label: "طلبات التسجيل", int: true },
-  { key: "spend", label: "الصرف (د.ك)", int: false },
+/** the follow-up week runs Monday → next Monday */
+const WEEK_START = 1;
+type Key = "reels" | "posts" | "stories" | "views" | "profile_visits" | "trials" | "registrations";
+const KEYS: { key: Key; label: string }[] = [
+  { key: "reels", label: "الريلز" },
+  { key: "posts", label: "البوستات" },
+  { key: "stories", label: "الستوريز" },
+  { key: "views", label: "المشاهدات" },
+  { key: "profile_visits", label: "زيارات الحساب" },
+  { key: "trials", label: "التجارب" },
+  { key: "registrations", label: "المسجلين" },
 ];
-const EMPTY: Record<Key, string> = { followers: "", reach: "", engagement: "", views: "", leads: "", spend: "" };
+const EMPTY = Object.fromEntries(KEYS.map((k) => [k.key, ""])) as Record<Key, string>;
 
-/** any date → the Saturday that starts its week */
+/** "الاثنين 19 أكتوبر ← الاثنين 26 أكتوبر" */
+const weekRange = (w: string) => {
+  const d = parseISO(w);
+  return `${format(d, "EEEE d MMMM", { locale: ar })} ← ${format(addDays(d, 7), "EEEE d MMMM", { locale: ar })}`;
+};
+
+/** any date → the Monday that starts its week */
 const snapToWeek = (d: string) => format(startOfWeek(parseISO(d), { weekStartsOn: WEEK_START }), "yyyy-MM-dd");
 
 export default function MetricsTab() {
@@ -34,22 +42,13 @@ export default function MetricsTab() {
   // the form shows the live row for (platform, week) until the user starts typing; edits live in `edits`
   const [edits, setEdits] = useState<{ vals: Record<Key, string>; notes: string } | null>(null);
   const [saved, setSaved] = useState(false);
-  const [series, setSeries] = useState<Key>("followers");
+  const [series, setSeries] = useState<Key>("views");
   const [showAll, setShowAll] = useState(false);
 
   const existing = data.metrics.find((m) => m.platform === platform && m.week_start === week);
   const base = useMemo(
     () => ({
-      vals: existing
-        ? {
-            followers: String(existing.followers),
-            reach: String(existing.reach),
-            engagement: String(existing.engagement),
-            views: String(existing.views),
-            leads: String(existing.leads),
-            spend: String(existing.spend),
-          }
-        : EMPTY,
+      vals: existing ? (Object.fromEntries(KEYS.map((k) => [k.key, String(existing[k.key] ?? 0)])) as Record<Key, string>) : EMPTY,
       notes: existing?.notes ?? "",
     }),
     [existing],
@@ -73,18 +72,13 @@ export default function MetricsTab() {
     const num = (k: Key) => {
       const n = Number(vals[k]);
       if (!Number.isFinite(n) || n < 0) return 0;
-      return KEYS.find((x) => x.key === k)!.int ? Math.round(n) : Math.round(n * 100) / 100;
+      return Math.round(n);
     };
     const values = {
       platform,
       week_start: week,
-      followers: num("followers"),
-      reach: num("reach"),
-      engagement: num("engagement"),
-      views: num("views"),
-      leads: num("leads"),
-      spend: num("spend"),
-      notes,
+      ...(Object.fromEntries(KEYS.map((k) => [k.key, num(k.key)])) as Record<Key, number>),
+      notes: notes.trim(),
     };
     const row = await upsert("metrics", values, "platform,week_start");
     if (!row) return;
@@ -102,13 +96,20 @@ export default function MetricsTab() {
       .filter((x) => x.rows.length > 0);
   }, [data.metrics]);
 
+  // goal metric → follow-up number: registrations/posts add up over all weeks, views = latest week
+  const GOAL_SOURCE: Partial<Record<string, { key: Key; total: boolean; hint: string }>> = {
+    subscribers: { key: "registrations", total: true, hint: "مجموع المسجلين" },
+    leads: { key: "trials", total: true, hint: "مجموع التجارب" },
+    posts: { key: "posts", total: true, hint: "مجموع البوستات" },
+    views: { key: "views", total: false, hint: "آخر أسبوع" },
+  };
   const goalActuals = data.goals
-    .filter((g) => g.platform !== "general" && ["followers", "views", "leads"].includes(g.metric))
+    .filter((g) => GOAL_SOURCE[g.metric])
     .map((g) => {
-      const rows = data.metrics.filter((m) => m.platform === g.platform).sort((a, b) => b.week_start.localeCompare(a.week_start));
-      const latest = rows[0];
-      const actual = latest ? (latest[g.metric as Key] as number) : null;
-      return { g, actual };
+      const src = GOAL_SOURCE[g.metric]!;
+      const rows = data.metrics.filter((m) => g.platform === "general" || m.platform === g.platform).sort((a, b) => b.week_start.localeCompare(a.week_start));
+      const actual = rows.length === 0 ? null : src.total ? rows.reduce((t, r) => t + (r[src.key] ?? 0), 0) : (rows[0][src.key] ?? 0);
+      return { g, actual, hint: src.hint };
     });
 
   return (
@@ -117,7 +118,7 @@ export default function MetricsTab() {
         {/* weekly entry */}
         <form onSubmit={save} className="card p-4 sm:p-5 flex flex-col gap-3">
           <div className="text-navy font-extrabold text-[17px]">أرقام الأسبوع</div>
-          <p className="text-ink-2 text-xs -mt-2">سجّل الأرقام كل أسبوع من إحصائيات كل منصة. نفس المنصة ونفس الأسبوع يتحدّث ما يتكرر.</p>
+          <p className="text-ink-2 text-xs -mt-2">المتابعة أسبوعية من الاثنين إلى الاثنين. نفس المنصة ونفس الأسبوع يتحدّث ولا يتكرر.</p>
           <Field label="المنصة">
             <PlatformSelect
               value={platform}
@@ -128,7 +129,7 @@ export default function MetricsTab() {
               }}
             />
           </Field>
-          <Field label="بداية الأسبوع (السبت)">
+          <Field label="الأسبوع — اختر أي يوم فيه">
             <input
               className="field num"
               dir="ltr"
@@ -141,16 +142,17 @@ export default function MetricsTab() {
               }}
               required
             />
+            <span className="text-[12px] font-bold text-ice-600 mt-1">{weekRange(week)}</span>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             {KEYS.map((k) => (
               <Field key={k.key} label={k.label}>
-                <input className="field num" dir="ltr" type="number" step={k.int ? 1 : "any"} min={0} inputMode="decimal" value={vals[k.key]} onChange={(e) => setVal(k.key, e.target.value)} placeholder="0" />
+                <input className="field num" dir="ltr" type="number" step={1} min={0} inputMode="numeric" value={vals[k.key]} onChange={(e) => setVal(k.key, e.target.value)} placeholder="0" />
               </Field>
             ))}
           </div>
-          <Field label="ملاحظة">
-            <input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي شي أثّر على الأرقام هذا الأسبوع" />
+          <Field label="ملاحظات أخرى">
+            <textarea className="field min-h-[84px] py-2 leading-relaxed" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي ملاحظة عن هذا الأسبوع — حملة، محتوى نجح، شي أثّر على الأرقام…" />
           </Field>
           <button className={clsx("btn-primary", saved && "bg-ice text-navy-900")} disabled={!edits && !!existing}>
             <Save size={17} /> {saved ? "تم الحفظ" : edits ? (existing ? "تحديث الأسبوع" : "حفظ الأسبوع") : existing ? "محفوظ" : "حفظ الأسبوع"}
@@ -163,14 +165,14 @@ export default function MetricsTab() {
             <div className="card p-4">
               <div className="text-navy font-extrabold text-[15px] mb-3">الأهداف مقابل الواقع</div>
               <div className="grid gap-2 sm:grid-cols-2">
-                {goalActuals.map(({ g, actual }) => {
+                {goalActuals.map(({ g, actual, hint }) => {
                   const pct = actual !== null && g.target_value > 0 ? Math.round((actual / g.target_value) * 100) : null;
                   return (
                     <div key={g.id} className="flex items-center gap-3 rounded-xl border border-silver-200 px-3 py-2">
                       <PlatformChip platform={g.platform} />
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-navy text-[14px] truncate">{g.title}</div>
-                        <div className="text-ink-2 text-xs">{metricLabel(g.metric)} · آخر رقم مسجل</div>
+                        <div className="text-ink-2 text-xs">{metricLabel(g.metric)} · {hint}</div>
                       </div>
                       <div className="text-end">
                         <div className="num text-navy font-bold text-[18px] leading-none">{actual === null ? "—" : fmtNum(actual)}</div>
@@ -206,7 +208,7 @@ export default function MetricsTab() {
 
       {data.metrics.length > 0 && (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[14px] min-w-[720px]">
+          <table className="w-full text-[14px] min-w-[900px]">
             <thead className="bg-navy text-white text-xs">
               <tr>
                 <th className="text-start px-3 py-2.5 font-bold">المنصة</th>
@@ -216,6 +218,7 @@ export default function MetricsTab() {
                     {k.label}
                   </th>
                 ))}
+                <th className="text-start px-3 py-2.5 font-bold">ملاحظات</th>
                 <th className="px-2" />
               </tr>
             </thead>
@@ -225,16 +228,15 @@ export default function MetricsTab() {
                   <td className="px-3 py-2">
                     <PlatformChip platform={m.platform} full />
                   </td>
-                  <td className="px-3 py-2 num text-navy font-bold" dir="ltr">
-                    {m.week_start}
-                  </td>
+                  <td className="px-3 py-2 text-navy font-bold text-[13px] whitespace-nowrap">{weekRange(m.week_start)}</td>
                   {KEYS.map((k) => (
                     <td key={k.key} className="px-3 py-2 num text-end text-navy">
-                      {fmtNum(m[k.key])}
+                      {fmtNum(m[k.key] ?? 0)}
                     </td>
                   ))}
+                  <td className="px-3 py-2 text-ink-2 text-[13px] max-w-[260px] truncate" title={m.notes}>{m.notes || "—"}</td>
                   <td className="px-2 py-2 text-end">
-                    <button onClick={async () => (await confirm({ title: "حذف أرقام هذا الأسبوع؟", message: `${platformLabel(m.platform)} — أسبوع ${m.week_start}` })) && remove("metrics", m.id)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
+                    <button onClick={async () => (await confirm({ title: "حذف أرقام هذا الأسبوع؟", message: `${platformLabel(m.platform)} — ${weekRange(m.week_start)}` })) && remove("metrics", m.id)} className="h-9 w-9 grid place-items-center rounded-lg text-ink-2 hover:bg-error-100 hover:text-error" aria-label="حذف">
                       <Trash2 size={15} />
                     </button>
                   </td>

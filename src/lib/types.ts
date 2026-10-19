@@ -213,6 +213,12 @@ export type MetricRow = {
   views: number;
   leads: number;
   spend: number;
+  reels: number;
+  posts: number;
+  stories: number;
+  profile_visits: number;
+  trials: number;
+  registrations: number;
   notes: string;
   created_by: string | null;
   created_at: string;

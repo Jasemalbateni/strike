@@ -20,6 +20,10 @@ export default function LoginForm() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (/[^\x00-\x7F]/.test(username)) {
+      setError("اكتب اسم المستخدم بالحروف الإنجليزية (مثل hamad) وليس بالعربي.");
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
