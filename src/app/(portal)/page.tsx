@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Megaphone, Users, Settings, ArrowLeft, Wallet, ClipboardCheck, IdCard, AlertTriangle, PenTool, CalendarDays, Hourglass, Undo2 } from "lucide-react";
+import { Bell, Megaphone, Users, Settings, ArrowLeft, Wallet, ClipboardCheck, IdCard, AlertTriangle, PenTool, CalendarDays, Hourglass, Undo2 } from "lucide-react";
 import { addDays, format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import { getProfile, canAccessMarketing, canApproveDrills, hasAccess, todayKW } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { kindOf, type Notification } from "@/lib/notifications";
 import { DAY_SHORT, isTrainingDay, subState, trialVisibleOn, type Branch, type Player, type Subscription } from "@/lib/players";
 
 const KW = "Asia/Kuwait";
@@ -88,6 +89,16 @@ export default async function HomePage() {
     }
   }
 
+  const { data: unreadData } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("recipient_id", profile.id)
+    .is("read_at", null)
+    .neq("channel", "whatsapp")
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const unread = (unreadData ?? []) as Notification[];
+
   const pending = pendingRes.count ?? 0;
   const returned = returnedRes.count ?? 0;
   const firstName = profile.full_name.trim().split(/\s+/)[0];
@@ -97,6 +108,30 @@ export default async function HomePage() {
     <div className="px-4 sm:px-8 py-6 sm:py-10 max-w-6xl">
       <p className="text-ink-2 text-[15px]">{greeting()}،</p>
       <h1 className="display text-navy text-[36px] sm:text-[44px] leading-none mt-1">{firstName}</h1>
+
+      {unread.length > 0 && (
+        <Link href="/notifications" className="mt-6 block rounded-2xl bg-navy text-white p-4 sm:p-5 shadow-[var(--shadow-pop)] hover:bg-navy-900 transition">
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <span className="h-9 w-9 rounded-xl bg-gold text-navy-900 grid place-items-center">
+              <Bell size={18} />
+            </span>
+            <span className="font-extrabold text-[16px]">
+              {unread.length === 1 ? "عندك تنبيه جديد" : <><span className="num">{unread.length}</span> تنبيهات جديدة</>}
+            </span>
+            <span className="ms-auto text-silver text-[13px] font-bold flex items-center gap-1">
+              عرض <ArrowLeft size={15} />
+            </span>
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {unread.slice(0, 3).map((n) => (
+              <li key={n.id} className="flex items-start gap-2 text-[14px]">
+                <span className="chip bg-white/10 text-silver text-[11px] px-2 py-0.5 shrink-0 mt-0.5">{kindOf(n.kind).label}</span>
+                <span className="font-bold leading-snug">{n.title}</span>
+              </li>
+            ))}
+          </ul>
+        </Link>
+      )}
 
       <div className="mt-6 grid gap-2">
         {can.players && expired + expiring > 0 && (

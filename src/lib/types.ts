@@ -38,6 +38,7 @@ export type Profile = {
   marketing_access: boolean;
   access: PageKey[];
   is_active: boolean;
+  phone?: string;
   mentions_seen_at?: string;
   created_at: string;
   updated_at: string;

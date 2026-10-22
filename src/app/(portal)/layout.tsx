@@ -5,7 +5,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
   const profile = await getProfile();
   return (
     <Shell
-      profile={{ full_name: profile.full_name, username: profile.username }}
+      profile={{ id: profile.id, full_name: profile.full_name, username: profile.username }}
       access={{
         attendance: hasAccess(profile, "attendance"),
         players: hasAccess(profile, "players"),

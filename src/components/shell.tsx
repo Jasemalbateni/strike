@@ -7,15 +7,17 @@ import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTo
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
+import { BellLink, FreshToast, useUnread } from "@/components/notifications/bell";
 
 type NavItem = { href: string; label: string; short?: string; icon: LucideIcon; phoneRank: number };
 
 export type ShellAccess = { attendance: boolean; players: boolean; drills: boolean; calendar: boolean; marketing: boolean; team: boolean };
 
-export default function Shell({ profile, access, children }: { profile: { full_name: string; username: string }; access: ShellAccess; children: React.ReactNode }) {
+export default function Shell({ profile, access, children }: { profile: { id: string; full_name: string; username: string }; access: ShellAccess; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [more, setMore] = useState(false);
+  const unread = useUnread(profile.id);
 
   // desktop order; phoneRank decides what makes the 5-slot bottom bar
   const nav: NavItem[] = [
@@ -57,6 +59,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
           </div>
           <div className="mx-4 xl:mx-5 h-px bg-white/10" />
           <nav className="flex-1 px-2.5 xl:px-3 py-4 flex flex-col gap-1">
+            <BellLink count={unread.count} variant="rail" />
             {[...nav, { href: "/settings", label: "الإعدادات", icon: Settings, phoneRank: 99 }].map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
@@ -101,6 +104,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
               <span className="en font-bold tracking-[0.12em]">STRIKE</span>
             </Link>
             <div className="flex items-center -me-3">
+              <BellLink count={unread.count} variant="bar" />
               <Link href="/settings" className={clsx("h-11 w-11 grid place-items-center", isActive("/settings") ? "text-ice" : "text-silver")} aria-label="الإعدادات">
                 <Settings size={20} />
               </Link>
@@ -110,6 +114,7 @@ export default function Shell({ profile, access, children }: { profile: { full_n
             </div>
           </header>
 
+          {unread.fresh && pathname !== "/notifications" && <FreshToast n={unread.fresh} onClose={unread.dismiss} />}
           <main className="flex-1 pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-8">{children}</main>
 
           {/* phone bottom nav */}

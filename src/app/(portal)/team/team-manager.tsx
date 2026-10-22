@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X, ClipboardCheck, IdCard, PenTool, CalendarDays } from "lucide-react";
+import { Phone, Plus, KeyRound, Trash2, Megaphone, ShieldCheck, Ban, Check, X, ClipboardCheck, IdCard, PenTool, CalendarDays } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
@@ -220,6 +220,23 @@ export default function TeamManager({ initial, meId }: { initial: Profile[]; meI
                     </span>
                   )}
                 </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-silver-200 flex items-center gap-2">
+                <span className="text-[12px] font-bold text-ink-2 me-1 flex items-center gap-1">
+                  <Phone size={13} className="text-[#1da851]" /> واتساب:
+                </span>
+                <input
+                  key={p.id + (p.phone ?? "")}
+                  className="field num h-9 max-w-[180px] text-[14px]"
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="9XXXXXXX"
+                  defaultValue={p.phone ?? ""}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== (p.phone ?? "")) patch(p.id, { phone: v });
+                  }}
+                />
               </div>
               <div className="mt-3 pt-3 border-t border-silver-200 flex items-center gap-2 flex-wrap">
                 <span className="text-[12px] font-bold text-ink-2 me-1">الصفحات:</span>
