@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, Megaphone, Users, Settings, ArrowLeft, Wallet, ClipboardCheck, IdCard, AlertTriangle, PenTool, CalendarDays, Hourglass, Undo2 } from "lucide-react";
+import { Bell, UserCheck, Megaphone, Users, Settings, ArrowLeft, Wallet, ClipboardCheck, IdCard, AlertTriangle, PenTool, CalendarDays, Hourglass, Undo2 } from "lucide-react";
 import { addDays, format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import { getProfile, canAccessMarketing, canApproveDrills, hasAccess, todayKW } from "@/lib/auth";
@@ -38,11 +38,12 @@ export default async function HomePage() {
 
   const [branchesRes, playersRes, sessionRes] = await Promise.all([
     supabase.from("branches").select("*").eq("is_active", true).order("created_at"),
-    can.attendance || can.players ? supabase.from("players").select("id, kind, trial_date, branch_id").eq("archived", false) : Promise.resolve({ data: [] }),
+    can.attendance || can.players ? supabase.from("players").select("id, kind, trial_date, branch_id, trial_outcome").eq("archived", false) : Promise.resolve({ data: [] }),
     can.attendance ? supabase.from("sessions").select("id, branch_id, cancelled").eq("session_date", today) : Promise.resolve({ data: [] }),
   ]);
   const branches = (branchesRes.data ?? []) as Branch[];
-  const players = (playersRes.data ?? []) as Pick<Player, "id" | "kind" | "trial_date" | "branch_id">[];
+  const players = (playersRes.data ?? []) as Pick<Player, "id" | "kind" | "trial_date" | "branch_id" | "trial_outcome">[];
+  const awaitingSub = players.filter((p) => p.kind === "trial" && p.trial_outcome === "registered").length;
   const todaySessions = (sessionRes.data ?? []) as { id: string; branch_id: string; cancelled: boolean }[];
   const trainingToday = branches.some((b) => isTrainingDay(today, b.training_days));
   const rosterToday = players.filter((p) => trialVisibleOn(p, today)).length;
@@ -147,6 +148,11 @@ export default async function HomePage() {
                 <span className="num">{expiring}</span> ينتهي خلال ٧ أيام
               </>
             )}
+          </Alert>
+        )}
+        {can.players && awaitingSub > 0 && (
+          <Alert href="/players" tone="gold" icon={<UserCheck size={18} className="shrink-0" />}>
+            <span className="num">{awaitingSub}</span> {awaitingSub === 1 ? "لاعب تجربة سجّل — بانتظار إضافة اشتراكه" : "لاعبين تجربة سجّلوا — بانتظار إضافة اشتراكاتهم"}
           </Alert>
         )}
         {can.approve && pending > 0 && (

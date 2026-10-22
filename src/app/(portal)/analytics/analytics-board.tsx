@@ -9,10 +9,11 @@ import clsx from "clsx";
 import { BarChart, TrendChart } from "@/components/development/charts";
 import { computeRenewals } from "@/components/players/renewals";
 import { PILLARS, fmt1, overall, pillarAvg, type Scores } from "@/lib/development";
+import { NOT_REGISTERED_REASONS } from "@/lib/players";
 import type { Player, Subscription } from "@/lib/players";
 
 export type Data = {
-  players: { id: string; full_name: string; group_id: string | null; branch_id: string | null; kind: "subscriber" | "trial"; source: string; trial_date: string | null; converted_at: string | null; archived: boolean; created_at: string }[];
+  players: { id: string; full_name: string; group_id: string | null; branch_id: string | null; kind: "subscriber" | "trial"; source: string; trial_date: string | null; converted_at: string | null; archived: boolean; created_at: string; trial_outcome: "registered" | "not_registered" | "removed" | null; trial_outcome_reason: string; trial_outcome_at: string | null }[];
   subs: { id: string; player_id: string; start_date: string; end_date: string; amount: number; paid: boolean; paid_at: string | null }[];
   sessions: { id: string; branch_id: string; session_date: string; cancelled: boolean }[];
   attendance: { session_id: string; player_id: string; status: "present" | "absent" | "late" | "excused" }[];
@@ -54,9 +55,32 @@ export default function AnalyticsBoard({ today, data }: { today: string; data: D
     const revenueIn = (test: (d: string) => boolean) => subs.filter((s) => s.paid && test(s.paid_at ?? s.start_date)).reduce((t, s) => t + (Number(s.amount) || 0), 0);
 
     // trials & conversion
-    const trials = players.filter((p) => p.trial_date && inP(p.trial_date));
+    // "removed" = entered by mistake / duplicate / never showed — not a real trial
+    const trials = players.filter((p) => p.trial_date && inP(p.trial_date) && p.trial_outcome !== "removed");
     const converted = trials.filter((p) => p.converted_at);
-    const trialsPrev = players.filter((p) => inPrev(p.trial_date));
+    const trialsPrev = players.filter((p) => inPrev(p.trial_date) && p.trial_outcome !== "removed");
+
+    // trial outcomes + reasons
+    const outcome = {
+      registered: trials.filter((p) => p.converted_at || p.trial_outcome === "registered").length,
+      notRegistered: trials.filter((p) => !p.converted_at && p.trial_outcome === "not_registered").length,
+      pending: trials.filter((p) => !p.converted_at && !p.trial_outcome).length,
+      removed: players.filter((p) => p.trial_date && inP(p.trial_date) && p.trial_outcome === "removed").length,
+    };
+    const reasonMap = new Map<string, number>();
+    const notes: { name: string; text: string; at: string }[] = [];
+    for (const p of trials.filter((x) => x.trial_outcome === "not_registered")) {
+      const parts = (p.trial_outcome_reason || "").split(" · ").map((x) => x.trim()).filter(Boolean);
+      const known = parts.filter((x) => NOT_REGISTERED_REASONS.includes(x));
+      const free = parts.filter((x) => !NOT_REGISTERED_REASONS.includes(x));
+      if (!parts.length) reasonMap.set("بدون سبب", (reasonMap.get("بدون سبب") ?? 0) + 1);
+      for (const k of known) reasonMap.set(k, (reasonMap.get(k) ?? 0) + 1);
+      if (free.length) {
+        if (!known.length) reasonMap.set("أخرى", (reasonMap.get("أخرى") ?? 0) + 1);
+        notes.push({ name: p.full_name, text: free.join(" · "), at: p.trial_outcome_at ?? p.trial_date ?? "" });
+      }
+    }
+    const reasons = [...reasonMap.entries()].map(([name, n]) => ({ name, n })).sort((a, b) => b.n - a.n);
     const convertedPrev = trialsPrev.filter((p) => p.converted_at);
 
     // attendance
@@ -153,6 +177,9 @@ export default function AnalyticsBoard({ today, data }: { today: string; data: D
       conv: pct(converted.length, trials.length),
       convPrev: prevFrom ? pct(convertedPrev.length, trialsPrev.length) : null,
       converted: converted.length,
+      outcome,
+      reasons,
+      reasonNotes: notes.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8),
       attRate: rate(att),
       attRatePrev: prevFrom ? rate(attPrev) : null,
       attCount: att.length,
@@ -275,6 +302,45 @@ export default function AnalyticsBoard({ today, data }: { today: string; data: D
           </p>
         </Panel>
       </div>
+
+      {/* trial outcomes */}
+      <Panel title="نتائج التجارب" sub={`${periodLabel} — من التحضير: سجّل / لم يسجّل وليش`}>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <Mini label="سجّلوا" value={m.outcome.registered} />
+          <Mini label="لم يسجّلوا" value={m.outcome.notRegistered} />
+          <Mini label="بدون نتيجة بعد" value={m.outcome.pending} />
+          <Mini label="انشالوا (غلط / مكرر)" value={m.outcome.removed} />
+        </div>
+        {m.reasons.length ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-2.5">
+              <div className="text-ink-2 text-[12.5px] font-bold">أسباب عدم التسجيل</div>
+              {m.reasons.map((r) => (
+                <div key={r.name} className="grid grid-cols-[140px_1fr_auto] items-center gap-2.5 text-[13px]" title={`${r.name}: ${r.n}`}>
+                  <span className="font-bold text-navy truncate">{r.name}</span>
+                  <span className="h-2.5 rounded-full bg-silver-100 relative">
+                    <span className="absolute inset-y-0 start-0 rounded-full bg-[#eb6834]" style={{ width: `${(r.n / m.reasons[0].n) * 100}%` }} />
+                  </span>
+                  <span className="num text-navy font-bold w-8 text-end">{r.n}</span>
+                </div>
+              ))}
+            </div>
+            {m.reasonNotes.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="text-ink-2 text-[12.5px] font-bold">ملاحظات المدربين</div>
+                {m.reasonNotes.map((n, i) => (
+                  <div key={i} className="rounded-lg bg-silver-100/70 px-3 py-2 text-[13px]">
+                    <span className="font-bold text-navy">{n.name}: </span>
+                    <span className="text-ink">{n.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <Empty>ما فيه أسباب مسجّلة بالفترة — تنسجل لما المدرب يختار «لم يسجّل» من صفحة الحضور</Empty>
+        )}
+      </Panel>
 
       {/* groups */}
       <Panel title="مقارنة الفئات" sub={`${periodLabel} — الحضور ومستوى اللاعبين حسب آخر تقييم`}>

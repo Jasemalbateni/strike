@@ -1,6 +1,11 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 
 export type PlayerKind = "subscriber" | "trial";
+export type TrialOutcome = "registered" | "not_registered" | "removed";
+
+/** why a trial didn't register — quick picks (free text allowed too) */
+export const NOT_REGISTERED_REASONS = ["السعر", "بعد المسافة / الموقع", "المواعيد ما تناسب", "الطفل ما استانس", "يجرب أكاديمية ثانية", "ما رد على التواصل", "مسافر / ظرف مؤقت", "العمر أو المستوى ما يناسب"];
+export const REMOVE_REASONS = ["انضاف بالغلط", "اسم مكرر", "ما حضر التجربة أصلاً"];
 export type AttendanceStatus = "present" | "absent" | "late" | "excused";
 
 export type Branch = { id: string; name: string; training_days: number[]; session_time: string | null; pitch_cost: number; is_active: boolean; session_minutes?: number };
@@ -19,6 +24,9 @@ export type Player = {
   trial_date: string | null;
   converted_at: string | null;
   notes: string;
+  trial_outcome?: TrialOutcome | null;
+  trial_outcome_reason?: string;
+  trial_outcome_at?: string | null;
   archived: boolean;
   created_at: string;
   updated_at: string;

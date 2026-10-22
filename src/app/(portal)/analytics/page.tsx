@@ -14,7 +14,7 @@ export default async function AnalyticsPage() {
   const supabase = await createClient();
 
   const [players, subs, sessions, attendance, groups, sheets, evals, notes, notifs, staff, metrics] = await Promise.all([
-    fetchAll<Data["players"][number]>((a, b) => supabase.from("players").select("id, full_name, group_id, branch_id, kind, source, trial_date, converted_at, archived, created_at").order("id").range(a, b)),
+    fetchAll<Data["players"][number]>((a, b) => supabase.from("players").select("id, full_name, group_id, branch_id, kind, source, trial_date, converted_at, archived, created_at, trial_outcome, trial_outcome_reason, trial_outcome_at").order("id").range(a, b)),
     fetchAll<Data["subs"][number]>((a, b) => supabase.from("subscriptions").select("id, player_id, start_date, end_date, amount, paid, paid_at").order("id").range(a, b)),
     fetchAll<Data["sessions"][number]>((a, b) => supabase.from("sessions").select("id, branch_id, session_date, cancelled").order("id").range(a, b)),
     fetchAll<Data["attendance"][number]>((a, b) => supabase.from("attendance").select("session_id, player_id, status").order("id").range(a, b)),

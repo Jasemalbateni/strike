@@ -845,7 +845,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
     }
     let updated: Player | null = null;
     if (convert) {
-      const up = await supabase.from("players").update({ kind: "subscriber", converted_at: start }).eq("id", player.id).select("*").single();
+      const up = await supabase.from("players").update({ kind: "subscriber", converted_at: start, trial_outcome: "registered", trial_outcome_at: new Date().toISOString() }).eq("id", player.id).select("*").single();
       updated = (up.data as Player) ?? { ...player, kind: "subscriber", converted_at: start };
     }
     setBusy(false);

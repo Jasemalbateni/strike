@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, Check, X, Clock, UserPlus, Sparkles, AlertTriangle, CalendarX, Users, FlaskConical } from "lucide-react";
+import { ChevronRight, ChevronLeft, Check, X, Clock, UserPlus, Sparkles, AlertTriangle, CalendarX, Users, FlaskConical, Flag, UserCheck, UserX, Trash2, Undo2 } from "lucide-react";
 import { addDays, format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
-import { DAY_SHORT, isTrainingDay, subState, trialVisibleOn, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
+import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, isTrainingDay, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
 import { bidi } from "@/lib/bidi";
 
 type Props = {
@@ -33,10 +33,16 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
   const [sessions, setSessions] = useState(initialSessions);
   const [attendance, setAttendance] = useState(initialAttendance);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastOk, setToastOkRaw] = useState<string | null>(null);
+  const setToastOk = (t: string) => {
+    setToastOkRaw(t);
+    setTimeout(() => setToastOkRaw(null), 2800);
+  };
   const [trialOpen, setTrialOpen] = useState(false);
   const [trialName, setTrialName] = useState("");
   const [trialAge, setTrialAge] = useState("");
   const [busy, setBusy] = useState(false);
+  const [outcomeFor, setOutcomeFor] = useState<Player | null>(null);
 
   const branch = branches.find((b) => b.id === branchId);
   const session = sessions.find((s) => s.branch_id === branchId && s.session_date === date);
@@ -196,6 +202,15 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
     await mark(data.id, "present");
   }
 
+  async function setOutcome(p: Player, outcome: TrialOutcome | null, reason = "") {
+    const { error } = await supabase.rpc("set_trial_outcome", { p_player: p.id, p_outcome: outcome, p_reason: reason });
+    if (error) return flash("تعذر الحفظ — تحقق من الاتصال");
+    const leaves = outcome === "not_registered" || outcome === "removed";
+    setPlayers((list) => (leaves ? list.filter((x) => x.id !== p.id) : list.map((x) => (x.id === p.id ? { ...x, trial_outcome: outcome, trial_outcome_reason: reason } : x))));
+    setOutcomeFor(null);
+    setToastOk(outcome === "registered" ? `${p.full_name}: سجّل ✓` : outcome === "not_registered" ? `${p.full_name}: لم يسجّل — انشال من القائمة` : outcome === "removed" ? `انشال ${p.full_name} من القائمة` : "تم التراجع");
+  }
+
   async function cancelSession() {
     const s = await ensureSession();
     if (!s) return;
@@ -316,7 +331,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                   <span className="min-w-0">
                     <span className="block font-extrabold text-navy text-[16px] leading-tight truncate">{r.p.full_name}</span>
                     <span className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      {trial && <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span>}
+                      {trial && (r.p.trial_outcome === "registered" ? <span className="chip bg-[#1a8f5f] text-white px-1.5 text-[10px]">سجّل ✓{me.canManage ? " — أضف الاشتراك" : ""}</span> : <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span>)}
                       {group && <span className="text-ink-2 text-[11px]">{bidi(group.name)}</span>}
                       {r.p.age && <span className="num text-ink-2 text-[11px]">{r.p.age} سنوات</span>}
                       {me.canManage && r.st.state === "expired" && <span className="chip bg-error text-white px-1.5 text-[10px]">انتهى الاشتراك</span>}
@@ -326,6 +341,11 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                 </button>
                 {/* explicit late / excused (small) */}
                 <div className="flex flex-col gap-1">
+                  {trial && (
+                    <button onClick={() => setOutcomeFor(r.p)} className="h-8 px-1.5 rounded-lg flex items-center justify-center gap-0.5 border border-gold bg-gold text-navy-900 text-[10.5px] font-extrabold" title="نتيجة التجربة" aria-label={`نتيجة تجربة ${r.p.full_name}`}>
+                      <Flag size={12} /> النتيجة
+                    </button>
+                  )}
                   <button onClick={() => mark(r.p.id, st === "late" ? "present" : "late")} className={clsx("h-8 w-8 rounded-lg grid place-items-center border text-[11px] font-bold", st === "late" ? "bg-navy text-white border-navy" : "bg-white/70 text-ink-2 border-silver-200")} title="متأخر" aria-label="متأخر">
                     <Clock size={13} />
                   </button>
@@ -357,6 +377,10 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
       </div>
 
       {toast && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-error text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{toast}</div>}
+
+      {toastOk && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-navy text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{toastOk}</div>}
+
+      {outcomeFor && <TrialOutcomeModal player={outcomeFor} canManage={me.canManage} onClose={() => setOutcomeFor(null)} onSave={(o, reason) => setOutcome(outcomeFor, o, reason)} />}
 
       <Modal
         open={trialOpen}
@@ -393,5 +417,86 @@ function Stat({ n, label, cls }: { n: number; label: string; cls: string }) {
       <span className={clsx("num text-[22px] font-bold leading-none", cls)}>{n}</span>
       <span className="text-ink-2 text-xs font-bold">{label}</span>
     </span>
+  );
+}
+
+function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Player; canManage: boolean; onClose: () => void; onSave: (o: TrialOutcome | null, reason: string) => Promise<void> }) {
+  const [choice, setChoice] = useState<TrialOutcome | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const reasons = choice === "removed" ? REMOVE_REASONS : NOT_REGISTERED_REASONS;
+  const reasonText = [...picked, note.trim()].filter(Boolean).join(" · ");
+
+  async function save(o: TrialOutcome | null) {
+    setBusy(true);
+    await onSave(o, o === "registered" || o === null ? "" : reasonText);
+    setBusy(false);
+  }
+  const toggle = (r: string) => setPicked((x) => (x.includes(r) ? x.filter((y) => y !== r) : [...x, r]));
+
+  const OPTIONS: { o: TrialOutcome; label: string; hint: string; icon: React.ReactNode; cls: string }[] = [
+    { o: "registered", label: "سجّل", hint: canManage ? "يبقى بالقائمة — أضف اشتراكه من سجل اللاعبين" : "يبقى بالقائمة والإدارة تضيف اشتراكه", icon: <UserCheck size={22} />, cls: "border-[#1a8f5f] text-[#1a8f5f] bg-[#1a8f5f]/5" },
+    { o: "not_registered", label: "لم يسجّل", hint: "ينشال من القائمة ويتسجل السبب", icon: <UserX size={22} />, cls: "border-error text-error bg-error-100/50" },
+    { o: "removed", label: "إزالة من القائمة", hint: "انضاف بالغلط، مكرر، أو ما حضر", icon: <Trash2 size={22} />, cls: "border-silver-200 text-ink-2 bg-white" },
+  ];
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`نتيجة تجربة ${player.full_name}`}
+      footer={
+        choice && choice !== "registered" ? (
+          <>
+            <button type="button" className="btn-ghost" onClick={() => setChoice(null)}>
+              رجوع
+            </button>
+            <button type="button" className={choice === "not_registered" ? "btn-danger-solid" : "btn-primary"} disabled={busy} onClick={() => save(choice)}>
+              {choice === "not_registered" ? "تأكيد — لم يسجّل" : "إزالة من القائمة"}
+            </button>
+          </>
+        ) : undefined
+      }
+    >
+      {!choice || choice === "registered" ? (
+        <div className="flex flex-col gap-2.5">
+          {player.trial_outcome === "registered" && (
+            <button type="button" onClick={() => save(null)} disabled={busy} className="rounded-xl border border-silver-200 bg-silver-100/60 px-3.5 py-2.5 text-start flex items-center gap-2 text-[13.5px] font-bold text-navy">
+              <Undo2 size={16} /> معلّم «سجّل» — تراجع وخلّه تجربة
+            </button>
+          )}
+          {OPTIONS.filter((x) => !(x.o === "registered" && player.trial_outcome === "registered")).map((x) => (
+            <button
+              key={x.o}
+              type="button"
+              disabled={busy}
+              onClick={() => (x.o === "registered" ? save("registered") : setChoice(x.o))}
+              className={clsx("rounded-2xl border-2 px-4 py-3.5 text-start flex items-center gap-3 transition hover:brightness-95", x.cls)}
+            >
+              {x.icon}
+              <span>
+                <span className="block font-extrabold text-[16px]">{x.label}</span>
+                <span className="block text-[12.5px] text-ink-2 font-medium">{x.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="text-navy font-bold text-[14px]">{choice === "not_registered" ? "ليش ما سجّل؟ (اختياري — اختر أكثر من سبب إذا تبي)" : "السبب (اختياري)"}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {reasons.map((r) => (
+              <button key={r} type="button" onClick={() => toggle(r)} aria-pressed={picked.includes(r)} className={clsx("chip h-9 px-3 text-[13px]", picked.includes(r) ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+                {r}
+              </button>
+            ))}
+          </div>
+          <Field label="ملاحظة">
+            <textarea className="field min-h-[72px] py-2" value={note} onChange={(e) => setNote(e.target.value)} placeholder={choice === "not_registered" ? "مثلاً: ولي الأمر قال يرجع بعد الصيف" : "أي ملاحظة"} />
+          </Field>
+        </div>
+      )}
+    </Modal>
   );
 }
