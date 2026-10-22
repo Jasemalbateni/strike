@@ -81,7 +81,7 @@ export function TrendChart({
 
   return (
     <div className="relative" ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} dir="ltr" className="w-full" style={{ height, direction: "ltr" }} role="img" aria-label={label} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height, direction: "ltr" }} role="img" aria-label={label} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PL} x2={W - PR} y1={y(t)} y2={y(t)} stroke="#E3E8EF" strokeWidth="1" />
