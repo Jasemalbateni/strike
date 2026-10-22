@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, Ellipsis, X, type LucideIcon } from "lucide-react";
+import { Home, Megaphone, Settings, Users, LogOut, ClipboardCheck, IdCard, PenTool, CalendarDays, Ellipsis, X, TrendingUp, BookOpen, BarChart3, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
@@ -11,7 +11,7 @@ import { BellLink, FreshToast, useUnread } from "@/components/notifications/bell
 
 type NavItem = { href: string; label: string; short?: string; icon: LucideIcon; phoneRank: number };
 
-export type ShellAccess = { attendance: boolean; players: boolean; drills: boolean; calendar: boolean; marketing: boolean; team: boolean };
+export type ShellAccess = { attendance: boolean; players: boolean; drills: boolean; calendar: boolean; development: boolean; marketing: boolean; analytics: boolean; team: boolean };
 
 export default function Shell({ profile, access, children }: { profile: { id: string; full_name: string; username: string }; access: ShellAccess; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,7 +26,10 @@ export default function Shell({ profile, access, children }: { profile: { id: st
     ...(access.players ? [{ href: "/players", label: "اللاعبين", icon: IdCard, phoneRank: 4 }] : []),
     ...(access.drills ? [{ href: "/drills", label: "مكتبة التمارين", short: "التمارين", icon: PenTool, phoneRank: 2 }] : []),
     ...(access.calendar ? [{ href: "/calendar", label: "التقويم", icon: CalendarDays, phoneRank: 3 }] : []),
+    ...(access.development ? [{ href: "/development", label: "تطوير اللاعبين", short: "التطوير", icon: TrendingUp, phoneRank: 4.5 }] : []),
+    { href: "/resources", label: "المصادر التعليمية", short: "المصادر", icon: BookOpen, phoneRank: 5.5 },
     ...(access.marketing ? [{ href: "/marketing", label: "مركز التسويق", short: "التسويق", icon: Megaphone, phoneRank: 5 }] : []),
+    ...(access.analytics ? [{ href: "/analytics", label: "التحليلات", icon: BarChart3, phoneRank: 5.8 }] : []),
     ...(access.team ? [{ href: "/team", label: "الفريق", icon: Users, phoneRank: 6 }] : []),
   ];
   const byRank = [...nav].sort((a, b) => a.phoneRank - b.phoneRank);

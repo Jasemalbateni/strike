@@ -1,4 +1,4 @@
-import { getProfile, canAccessMarketing, hasAccess } from "@/lib/auth";
+import { getProfile, canAccessMarketing, canEvaluate, hasAccess } from "@/lib/auth";
 import Shell from "@/components/shell";
 
 export default async function PortalLayout({ children }: LayoutProps<"/">) {
@@ -11,7 +11,9 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
         players: hasAccess(profile, "players"),
         drills: hasAccess(profile, "drills"),
         calendar: hasAccess(profile, "calendar"),
+        development: canEvaluate(profile),
         marketing: canAccessMarketing(profile),
+        analytics: profile.role === "owner",
         team: profile.role === "owner",
       }}
     >

@@ -49,3 +49,8 @@ export function requireAccess(p: Profile, page: PageKey) {
 export function todayKW() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+
+/** evaluate players / player development file — mirrors SQL can_evaluate() */
+export function canEvaluate(p: Profile) {
+  return p.is_active && ["owner", "coach", "branch_manager"].includes(p.role);
+}
