@@ -27,8 +27,10 @@ export default function NotificationsCenter({
   initialMine,
   staff: initialStaff,
   initialSent,
+  preselect = null,
 }: {
   meId: string;
+  preselect?: string | null;
   isOwner: boolean;
   initialMine: Notification[];
   staff: Recipient[];
@@ -61,6 +63,7 @@ export default function NotificationsCenter({
       {tab === "send" && (
         <SendForm
           staff={staff}
+          preselect={preselect && staff.some((s) => s.id === preselect) ? preselect : null}
           onPhoneSaved={(id, phone) => setStaff((s) => s.map((p) => (p.id === id ? { ...p, phone } : p)))}
           onSent={(rows) => setSent((s) => [...rows, ...s])}
           onUpdate={(n) => setSent((s) => s.map((x) => (x.id === n.id ? n : x)))}
@@ -76,18 +79,20 @@ export default function NotificationsCenter({
 
 function SendForm({
   staff,
+  preselect,
   onPhoneSaved,
   onSent,
   onUpdate,
 }: {
   staff: Recipient[];
+  preselect: string | null;
   onPhoneSaved: (id: string, phone: string) => void;
   onSent: (rows: Notification[]) => void;
   onUpdate: (n: Notification) => void;
 }) {
   const supabase = useMemo(() => createClient(), []);
-  const [to, setTo] = useState<string[]>([]);
-  const [kind, setKind] = useState<NotifKind>("late");
+  const [to, setTo] = useState<string[]>(preselect ? [preselect] : []);
+  const [kind, setKind] = useState<NotifKind>(preselect ? "general" : "late");
   const [date, setDate] = useState(todayKW);
   const [title, setTitle] = useState<string | null>(null); // null = follow the template
   const [body, setBody] = useState("");

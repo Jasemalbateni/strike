@@ -7,7 +7,8 @@ import type { Notification } from "@/lib/notifications";
 
 export const metadata: Metadata = { title: "التنبيهات" };
 
-export default async function NotificationsPage() {
+export default async function NotificationsPage({ searchParams }: PageProps<"/notifications">) {
+  const { to } = await searchParams;
   const me = await getProfile();
   const isOwner = me.role === "owner";
   const supabase = await createClient();
@@ -23,6 +24,7 @@ export default async function NotificationsPage() {
       <PageHeader title="التنبيهات" subtitle={isOwner ? "أرسل تنبيه لمدرب أو أكثر — على الموقع أو الواتساب أو الاثنين" : "التنبيهات اللي توصلك من إدارة الأكاديمية"} />
       <NotificationsCenter
         meId={me.id}
+        preselect={typeof to === "string" ? to : null}
         isOwner={isOwner}
         initialMine={(mine.data ?? []) as Notification[]}
         staff={((staff.data ?? []) as Recipient[]).filter((p) => p.id !== me.id)}

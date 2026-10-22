@@ -8,6 +8,7 @@ import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { ConfirmProvider } from "@/components/confirm";
 import { BellLink, FreshToast, useUnread } from "@/components/notifications/bell";
+import { usePresence } from "@/lib/use-presence";
 
 type NavItem = { href: string; label: string; short?: string; icon: LucideIcon; phoneRank: number };
 
@@ -18,6 +19,7 @@ export default function Shell({ profile, access, children }: { profile: { id: st
   const router = useRouter();
   const [more, setMore] = useState(false);
   const unread = useUnread(profile.id);
+  usePresence();
 
   // desktop order; phoneRank decides what makes the 5-slot bottom bar
   const nav: NavItem[] = [
