@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronLeft, Check, X, Clock, UserPlus, Sparkles, AlertTriangle, CalendarX, Users, FlaskConical, Flag, UserCheck, UserX, Trash2, Undo2 } from "lucide-react";
+import { ChevronRight, ChevronLeft, Check, X, Clock, UserPlus, Sparkles, AlertTriangle, CalendarX, Users, FlaskConical, Flag, UserCheck, UserX, Trash2, Undo2, ClipboardList } from "lucide-react";
 import { addDays, format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
+import TrialsLog from "@/components/players/trials-log";
 import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, isTrainingDay, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
 import { bidi } from "@/lib/bidi";
 
@@ -43,6 +44,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
   const [trialAge, setTrialAge] = useState("");
   const [busy, setBusy] = useState(false);
   const [outcomeFor, setOutcomeFor] = useState<Player | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
 
   const branch = branches.find((b) => b.id === branchId);
   const session = sessions.find((s) => s.branch_id === branchId && s.session_date === date);
@@ -230,9 +232,14 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
           <p className="text-ink-2 text-sm mt-1.5">اضغط على اسم اللاعب: مرة = حاضر، مرتين = غائب، ثلاث = إلغاء.</p>
         </div>
         {me.canManage && (
-          <Link href="/players" className="btn-outline h-10 px-3 text-sm">
-            <Users size={16} /> <span className="hidden sm:inline">سجل اللاعبين</span>
-          </Link>
+          <div className="flex gap-2">
+            <button onClick={() => setLogOpen(true)} className="btn-accent h-10 px-3 text-sm">
+              <ClipboardList size={16} /> سجل التجارب
+            </button>
+            <Link href="/players" className="btn-outline h-10 px-3 text-sm">
+              <Users size={16} /> <span className="hidden sm:inline">سجل اللاعبين</span>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -379,6 +386,8 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
       {toast && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-error text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{toast}</div>}
 
       {toastOk && <div className="fixed bottom-[calc(84px+env(safe-area-inset-bottom))] md:bottom-6 inset-x-4 md:inset-x-auto md:end-6 z-[60] rounded-xl bg-navy text-white px-4 py-2.5 text-sm font-bold shadow-[var(--shadow-pop)] fade-up text-center">{toastOk}</div>}
+
+      {me.canManage && <TrialsLog open={logOpen} onClose={() => setLogOpen(false)} today={today} groups={groups} />}
 
       {outcomeFor && <TrialOutcomeModal player={outcomeFor} canManage={me.canManage} onClose={() => setOutcomeFor(null)} onSave={(o, reason) => setOutcome(outcomeFor, o, reason)} />}
 
