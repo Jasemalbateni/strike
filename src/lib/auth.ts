@@ -6,11 +6,12 @@ import type { PageKey, Profile } from "@/lib/types";
 /** Current user's profile (cached per request). Redirects to /login when signed out. */
 export const getProfile = cache(async (): Promise<Profile> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  // verified JWT claims (local signature check, no extra round trip); the profile row below is the source
+  // of truth for is_active, so a deactivated user is still signed out immediately
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims?.sub;
+  if (!userId) redirect("/login");
+  const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
   // deleted or deactivated while signed in → clear the session, then show the message on the login page
   if (!data || !data.is_active) redirect("/auth/signout?reason=inactive");
   return data as Profile;

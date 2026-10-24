@@ -25,10 +25,11 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // refreshes the session cookie when needed
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // refreshes the session cookie when needed, then verifies the JWT.
+  // getClaims() checks the signature locally (cached signing keys) instead of a round trip to Supabase Auth
+  // on every request; it falls back to the server check automatically if the project uses a shared secret.
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const user = claimsData?.claims?.sub ? { id: claimsData.claims.sub } : null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some(

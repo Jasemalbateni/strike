@@ -36,10 +36,11 @@ export default async function HomePage() {
   const supabase = await createClient();
   const today = todayKW();
 
-  const [branchesRes, playersRes, sessionRes] = await Promise.all([
+  const [branchesRes, playersRes, sessionRes, unreadRes] = await Promise.all([
     supabase.from("branches").select("*").eq("is_active", true).order("created_at"),
     can.attendance || can.players ? supabase.from("players").select("id, kind, trial_date, branch_id, trial_outcome").eq("archived", false) : Promise.resolve({ data: [] }),
     can.attendance ? supabase.from("sessions").select("id, branch_id, cancelled").eq("session_date", today) : Promise.resolve({ data: [] }),
+    supabase.from("notifications").select("*").eq("recipient_id", profile.id).is("read_at", null).neq("channel", "whatsapp").order("created_at", { ascending: false }).limit(5),
   ]);
   const branches = (branchesRes.data ?? []) as Branch[];
   const players = (playersRes.data ?? []) as Pick<Player, "id" | "kind" | "trial_date" | "branch_id" | "trial_outcome">[];
@@ -48,8 +49,11 @@ export default async function HomePage() {
   const trainingToday = branches.some((b) => isTrainingDay(today, b.training_days));
   const rosterToday = players.filter((p) => trialVisibleOn(p, today)).length;
 
+  // next training day (needs branches) — its plan is fetched in the same parallel batch below
+  const nextDay = can.calendar ? nextTraining(today, branches) : null;
+
   // counts that depend on access
-  const [presentRes, mkUpcoming, mkReview, subsRes, pendingRes, returnedRes, libraryRes] = await Promise.all([
+  const [presentRes, mkUpcoming, mkReview, subsRes, pendingRes, returnedRes, libraryRes, planRes] = await Promise.all([
     todaySessions.length
       ? supabase.from("attendance").select("id", { count: "exact", head: true }).in("session_id", todaySessions.map((s) => s.id)).in("status", ["present", "late"])
       : Promise.resolve({ count: 0 }),
@@ -59,6 +63,7 @@ export default async function HomePage() {
     can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "pending") : Promise.resolve({ count: 0 }),
     can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "returned").eq("author_id", profile.id) : Promise.resolve({ count: 0 }),
     can.drills ? supabase.from("drill_sheets").select("id", { count: "exact", head: true }).eq("status", "approved") : Promise.resolve({ count: 0 }),
+    nextDay ? supabase.from("plan_items").select("kind, duration_min").eq("item_date", nextDay) : Promise.resolve({ data: [] }),
   ]);
   const presentToday = presentRes.count ?? 0;
 
@@ -77,28 +82,16 @@ export default async function HomePage() {
     }
   }
 
-  // next training day + its plan
-  const nextDay = can.calendar ? nextTraining(today, branches) : null;
+  // next training day's plan
   let planCount = 0, planMinutes = 0;
-  if (nextDay) {
-    const { data } = await supabase.from("plan_items").select("kind, duration_min").eq("item_date", nextDay);
-    for (const it of (data ?? []) as { kind: string; duration_min: number | null }[]) {
-      if (it.kind === "drill") {
-        planCount++;
-        planMinutes += it.duration_min ?? 0;
-      }
+  for (const it of (planRes.data ?? []) as { kind: string; duration_min: number | null }[]) {
+    if (it.kind === "drill") {
+      planCount++;
+      planMinutes += it.duration_min ?? 0;
     }
   }
 
-  const { data: unreadData } = await supabase
-    .from("notifications")
-    .select("*")
-    .eq("recipient_id", profile.id)
-    .is("read_at", null)
-    .neq("channel", "whatsapp")
-    .order("created_at", { ascending: false })
-    .limit(5);
-  const unread = (unreadData ?? []) as Notification[];
+  const unread = (unreadRes.data ?? []) as Notification[];
 
   const pending = pendingRes.count ?? 0;
   const returned = returnedRes.count ?? 0;
