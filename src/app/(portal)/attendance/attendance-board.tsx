@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
 import TrialsLog from "@/components/players/trials-log";
-import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, isTrainingDay, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
+import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, fmtDate, isTrainingDay, nthSessionDate, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
 import { bidi } from "@/lib/bidi";
 
 type Props = {
@@ -204,6 +204,27 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
     await mark(data.id, "present");
   }
 
+  /** «سجّل» + اشتراكه في خطوة وحدة (للإدارة): يتحوّل لمشترك ويبدأ اشتراكه من الحصة القادمة */
+  async function registerWithSubscription(p: Player, sub: NewSub) {
+    const { error } = await supabase.rpc("set_trial_outcome", { p_player: p.id, p_outcome: "registered", p_reason: "" });
+    if (error) return flash("تعذر الحفظ — تحقق من الاتصال");
+    const ins = await supabase
+      .from("subscriptions")
+      .insert({ player_id: p.id, start_date: sub.start, end_date: sub.end, sessions_count: sub.count, amount: sub.amount, paid: sub.paid, paid_at: sub.paid ? today : null, notes: "اشتراك أول بعد التجربة" })
+      .select("id")
+      .single();
+    if (ins.error) {
+      setPlayers((list) => list.map((x) => (x.id === p.id ? { ...x, trial_outcome: "registered" } : x)));
+      setOutcomeFor(null);
+      return flash("انحفظ «سجّل» بس الاشتراك ما انحفظ — أضفه من سجل اللاعبين");
+    }
+    const up = await supabase.from("players").update({ kind: "subscriber", converted_at: sub.start }).eq("id", p.id).select("*").single();
+    const row = (up.data as Player) ?? { ...p, kind: "subscriber" as const, converted_at: sub.start, trial_outcome: "registered" as const };
+    setPlayers((list) => list.map((x) => (x.id === p.id ? { ...x, ...row } : x)));
+    setOutcomeFor(null);
+    setToastOk(`${p.full_name}: صار مشترك ✓ — من ${fmtDate(sub.start)} إلى ${fmtDate(sub.end)}`);
+  }
+
   async function setOutcome(p: Player, outcome: TrialOutcome | null, reason = "") {
     const { error } = await supabase.rpc("set_trial_outcome", { p_player: p.id, p_outcome: outcome, p_reason: reason });
     if (error) return flash("تعذر الحفظ — تحقق من الاتصال");
@@ -219,6 +240,17 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
     if (!(await confirm({ title: s.cancelled ? "إلغاء إلغاء الحصة؟" : "إلغاء حصة اليوم؟", message: s.cancelled ? "ترجع الحصة عادية." : "تنعلّم كملغاة (ما تنحسب إيجار ملعب ولا غياب).", danger: !s.cancelled, confirmText: s.cancelled ? "رجّعها" : "إلغاء الحصة" }))) return;
     const { error } = await supabase.from("sessions").update({ cancelled: !s.cancelled }).eq("id", s.id);
     if (error) flash("تعذر الحفظ");
+  }
+
+  /** next training day after the viewed date, 12 sessions, last price paid */
+  function subDefaults(p: Player) {
+    const b = branches.find((x) => x.id === p.branch_id) ?? branch;
+    const days = b?.training_days ?? [6, 1, 3];
+    let d = addDays(parseISO(date), 1);
+    for (let i = 0; i < 14 && !days.includes(d.getDay()); i++) d = addDays(d, 1);
+    const start = format(d, "yyyy-MM-dd");
+    const last = [...subscriptions].sort((a, b2) => b2.created_at.localeCompare(a.created_at))[0];
+    return { start, days, amount: last ? Number(last.amount) : 45 };
   }
 
   const dayName = DAY_SHORT[parseISO(date).getDay()];
@@ -389,7 +421,16 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
 
       {me.canManage && <TrialsLog open={logOpen} onClose={() => setLogOpen(false)} today={today} groups={groups} />}
 
-      {outcomeFor && <TrialOutcomeModal player={outcomeFor} canManage={me.canManage} onClose={() => setOutcomeFor(null)} onSave={(o, reason) => setOutcome(outcomeFor, o, reason)} />}
+      {outcomeFor && (
+        <TrialOutcomeModal
+          player={outcomeFor}
+          canManage={me.canManage}
+          defaults={subDefaults(outcomeFor)}
+          onClose={() => setOutcomeFor(null)}
+          onSave={(o, reason) => setOutcome(outcomeFor, o, reason)}
+          onRegister={(sub) => registerWithSubscription(outcomeFor, sub)}
+        />
+      )}
 
       <Modal
         open={trialOpen}
@@ -429,8 +470,30 @@ function Stat({ n, label, cls }: { n: number; label: string; cls: string }) {
   );
 }
 
-function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Player; canManage: boolean; onClose: () => void; onSave: (o: TrialOutcome | null, reason: string) => Promise<void> }) {
+type NewSub = { start: string; end: string; count: number; amount: number; paid: boolean };
+
+function TrialOutcomeModal({
+  player,
+  canManage,
+  defaults,
+  onClose,
+  onSave,
+  onRegister,
+}: {
+  player: Player;
+  canManage: boolean;
+  defaults: { start: string; days: number[]; amount: number };
+  onClose: () => void;
+  onSave: (o: TrialOutcome | null, reason: string) => Promise<void>;
+  onRegister: (sub: NewSub) => Promise<void>;
+}) {
   const [choice, setChoice] = useState<TrialOutcome | null>(null);
+  const [subStep, setSubStep] = useState(false);
+  const [start, setStart] = useState(defaults.start);
+  const [count, setCount] = useState("12");
+  const [amount, setAmount] = useState(String(defaults.amount));
+  const [paidNow, setPaidNow] = useState(true);
+  const subEnd = start && Number(count) > 0 ? nthSessionDate(start, defaults.days, Number(count)) : start;
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -444,8 +507,15 @@ function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Pla
   }
   const toggle = (r: string) => setPicked((x) => (x.includes(r) ? x.filter((y) => y !== r) : [...x, r]));
 
+  async function register() {
+    if (!start || !subEnd) return;
+    setBusy(true);
+    await onRegister({ start, end: subEnd, count: Number(count) || 12, amount: Number(amount) || 0, paid: paidNow });
+    setBusy(false);
+  }
+
   const OPTIONS: { o: TrialOutcome; label: string; hint: string; icon: React.ReactNode; cls: string }[] = [
-    { o: "registered", label: "سجّل", hint: canManage ? "يبقى بالقائمة — أضف اشتراكه من سجل اللاعبين" : "يبقى بالقائمة والإدارة تضيف اشتراكه", icon: <UserCheck size={22} />, cls: "border-[#1a8f5f] text-[#1a8f5f] bg-[#1a8f5f]/5" },
+    { o: "registered", label: "سجّل", hint: canManage ? "يتحوّل لمشترك ويبدأ اشتراكه من الحصة القادمة" : "يبقى بالقائمة والإدارة تضيف اشتراكه", icon: <UserCheck size={22} />, cls: "border-[#1a8f5f] text-[#1a8f5f] bg-[#1a8f5f]/5" },
     { o: "not_registered", label: "لم يسجّل", hint: "ينشال من القائمة ويتسجل السبب", icon: <UserX size={22} />, cls: "border-error text-error bg-error-100/50" },
     { o: "removed", label: "إزالة من القائمة", hint: "انضاف بالغلط، مكرر، أو ما حضر", icon: <Trash2 size={22} />, cls: "border-silver-200 text-ink-2 bg-white" },
   ];
@@ -456,7 +526,16 @@ function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Pla
       onClose={onClose}
       title={`نتيجة تجربة ${player.full_name}`}
       footer={
-        choice && choice !== "registered" ? (
+        subStep ? (
+          <>
+            <button type="button" className="btn-ghost" onClick={() => setSubStep(false)}>
+              رجوع
+            </button>
+            <button type="button" className="btn-primary" disabled={busy || !start} onClick={register}>
+              <UserCheck size={16} /> تحويل لمشترك
+            </button>
+          </>
+        ) : choice && choice !== "registered" ? (
           <>
             <button type="button" className="btn-ghost" onClick={() => setChoice(null)}>
               رجوع
@@ -468,8 +547,45 @@ function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Pla
         ) : undefined
       }
     >
-      {!choice || choice === "registered" ? (
+      {subStep ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <p className="sm:col-span-2 text-sm text-navy bg-[#1a8f5f]/10 rounded-xl px-3 py-2">يتحوّل من «تجربة» إلى «مشترك» وينحسب ضمن التجارب اللي سجّلت.</p>
+          <Field label="بداية الاشتراك (الحصة القادمة)">
+            <input className="field num" dir="ltr" type="date" value={start} onChange={(e) => setStart(e.target.value)} required />
+          </Field>
+          <Field label="عدد الحصص">
+            <input className="field num" dir="ltr" type="number" inputMode="numeric" min={1} max={60} value={count} onChange={(e) => setCount(e.target.value)} />
+          </Field>
+          <Field label="المبلغ (د.ك)">
+            <input className="field num" dir="ltr" type="number" inputMode="decimal" min={0} step="0.5" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+          <Field label="الدفع" group>
+            <div className="flex gap-1.5">
+              {[
+                [true, "دفع"],
+                [false, "ما دفع بعد"],
+              ].map(([v, l]) => (
+                <button key={String(v)} type="button" onClick={() => setPaidNow(v as boolean)} aria-pressed={paidNow === v} className={clsx("chip h-10 px-3 text-[13px] flex-1 justify-center", paidNow === v ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+                  {l as string}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <p className="sm:col-span-2 text-[13px] text-ink-2 num">
+            الاشتراك: من <b className="text-navy">{start ? fmtDate(start) : "—"}</b> إلى <b className="text-navy">{subEnd ? fmtDate(subEnd) : "—"}</b> ({count} حصة)
+          </p>
+        </div>
+      ) : !choice || choice === "registered" ? (
         <div className="flex flex-col gap-2.5">
+          {player.trial_outcome === "registered" && canManage && (
+            <button type="button" onClick={() => setSubStep(true)} disabled={busy} className="rounded-2xl border-2 border-[#1a8f5f] bg-[#1a8f5f] text-white px-4 py-3.5 text-start flex items-center gap-3">
+              <UserCheck size={22} />
+              <span>
+                <span className="block font-extrabold text-[16px]">أضف اشتراكه الحين</span>
+                <span className="block text-[12.5px] text-white/80 font-medium">يتحوّل لمشترك من الحصة القادمة</span>
+              </span>
+            </button>
+          )}
           {player.trial_outcome === "registered" && (
             <button type="button" onClick={() => save(null)} disabled={busy} className="rounded-xl border border-silver-200 bg-silver-100/60 px-3.5 py-2.5 text-start flex items-center gap-2 text-[13.5px] font-bold text-navy">
               <Undo2 size={16} /> معلّم «سجّل» — تراجع وخلّه تجربة
@@ -480,7 +596,7 @@ function TrialOutcomeModal({ player, canManage, onClose, onSave }: { player: Pla
               key={x.o}
               type="button"
               disabled={busy}
-              onClick={() => (x.o === "registered" ? save("registered") : setChoice(x.o))}
+              onClick={() => (x.o === "registered" ? (canManage ? setSubStep(true) : save("registered")) : setChoice(x.o))}
               className={clsx("rounded-2xl border-2 px-4 py-3.5 text-start flex items-center gap-3 transition hover:brightness-95", x.cls)}
             >
               {x.icon}
