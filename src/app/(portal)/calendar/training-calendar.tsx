@@ -22,6 +22,14 @@ const DAY_NAMES = ["السبت", "الأحد", "الاثنين", "الثلاثا
 const DAY_SHORT_AR = ["سبت", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة"];
 
 type Kind = "drill" | "event" | "match" | "holiday" | "note";
+/** the session is split in two groups, each with its own coach; null = both groups together */
+type Squad = "A" | "B" | null;
+const SQUADS: { v: Squad; label: string; short: string }[] = [
+  { v: null, label: "المجموعتين معاً", short: "معاً" },
+  { v: "A", label: "مجموعة A", short: "A" },
+  { v: "B", label: "مجموعة B", short: "B" },
+];
+const SQUAD_CHIP: Record<"A" | "B", string> = { A: "bg-ice text-navy-900", B: "bg-gold text-navy-900" };
 type DrillLite = Pick<Drill, "id" | "title" | "category" | "duration_min" | "board" | "status">;
 type SheetLite = Pick<DrillSheet, "id" | "title" | "kind" | "drills" | "status">;
 /** everything the plan needs to join: legacy drawings + drill sheets */
@@ -31,6 +39,7 @@ type Item = {
   item_date: string;
   branch_id: string | null;
   group_id: string | null;
+  squad?: Squad;
   kind: Kind;
   drill_id: string | null;
   sheet_id: string | null;
@@ -144,7 +153,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
   const groupName = (id: string | null) => bidi(groups.find((g) => g.id === id)?.name);
 
   async function move(it: Item, dir: -1 | 1) {
-    const list = itemsOn(it.item_date);
+    const list = itemsOn(it.item_date).filter((x) => x.kind !== "drill" || (x.squad ?? null) === (it.squad ?? null));
     const i = list.findIndex((x) => x.id === it.id);
     const j = i + dir;
     if (j < 0 || j >= list.length) return;
@@ -170,8 +179,18 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
     }
   }
 
+  /** move a planned drill to group A / B / both */
+  async function setSquad(it: Item, squad: Squad) {
+    setItems((all) => all.map((x) => (x.id === it.id ? { ...x, squad } : x)));
+    const { error } = await supabase.from("plan_items").update({ squad }).eq("id", it.id);
+    if (error) {
+      flash("تعذّر الحفظ");
+      reload();
+    }
+  }
+
   /** add one drill (or match) of a sheet, or a whole session sheet (every item, in order) */
-  async function addFromSheet(sheet: SheetLite, index: number | null, groupId: string | null) {
+  async function addFromSheet(sheet: SheetLite, index: number | null, groupId: string | null, squad: Squad) {
     const all = normalizeDrills(sheet.drills);
     const picks = index === null ? all.map((d, i) => ({ d, i })) : [{ d: all[index], i: index }];
     let pos = Math.max(-1, ...itemsOn(selected).map((x) => x.position)) + 1;
@@ -179,6 +198,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
       item_date: selected,
       branch_id: branchId ?? branches[0]?.id ?? null,
       group_id: groupId,
+      squad,
       kind: "drill",
       sheet_id: sheet.id,
       sheet_index: i,
@@ -188,7 +208,8 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
     const { data, error } = await supabase.from("plan_items").insert(rows).select(PLAN_SELECT);
     if (error || !data) return flash("تعذّرت الإضافة");
     setItems((cur) => [...cur.filter((x) => !data.some((n) => n.id === x.id)), ...(data as Item[])]);
-    flash(index === null ? "أُضيفت الحصة كاملة لليوم" : "أُضيف التمرين لليوم");
+    const to = squad ? ` — مجموعة ${squad}` : "";
+    flash(index === null ? `أُضيفت الحصة كاملة لليوم${to}` : `أُضيف التمرين لليوم${to}`);
   }
 
   const sel = parseISO(selected);
@@ -197,7 +218,13 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
   const selEvents = selItems.filter((i) => i.kind !== "drill");
   const selTraining = trainingOn(selected);
   const selSessions = sessionOn(selected);
-  const planned = selDrills.reduce((s, i) => s + (itemDrill(i).dur ?? 0), 0);
+  const mins = (list: Item[]) => list.reduce((s, i) => s + (itemDrill(i).dur ?? 0), 0);
+  const split = selDrills.some((i) => i.squad === "A" || i.squad === "B");
+  const together = selDrills.filter((i) => !i.squad);
+  const squadA = selDrills.filter((i) => i.squad === "A");
+  const squadB = selDrills.filter((i) => i.squad === "B");
+  // each group's session = the shared part + its own part
+  const planned = split ? Math.max(mins(together) + mins(squadA), mins(together) + mins(squadB)) : mins(selDrills);
   // session sheets planned on this day (for the print link)
   const selSheets = selDrills.map((i) => i.drill_sheets).filter((sh, idx, arr): sh is SheetLite => !!sh && sh.kind === "session" && arr.findIndex((x) => x?.id === sh.id) === idx);
   const sessionLen = selTraining[0]?.session_minutes ?? 60;
@@ -233,11 +260,25 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="font-extrabold text-navy text-[15px]">خطة الحصة</div>
-          {selDrills.length > 0 && (
-            <div className="text-[12px] font-bold text-ink-2">
-              <span className={clsx("num", planned > sessionLen ? "text-error" : "text-navy")}>{planned}</span> / <span className="num">{sessionLen}</span> دقيقة
-            </div>
-          )}
+          {selDrills.length > 0 &&
+            (split ? (
+              <div className="text-[12px] font-bold text-ink-2 flex items-center gap-2">
+                {(["A", "B"] as const).map((q) => {
+                  const m = mins(together) + mins(q === "A" ? squadA : squadB);
+                  return (
+                    <span key={q} className="inline-flex items-center gap-1">
+                      <span className={clsx("chip px-1.5 text-[10.5px]", SQUAD_CHIP[q])}>{q}</span>
+                      <span className={clsx("num", m > sessionLen ? "text-error" : "text-navy")}>{m}</span>/<span className="num">{sessionLen}</span>
+                    </span>
+                  );
+                })}
+                <span>د</span>
+              </div>
+            ) : (
+              <div className="text-[12px] font-bold text-ink-2">
+                <span className={clsx("num", planned > sessionLen ? "text-error" : "text-navy")}>{planned}</span> / <span className="num">{sessionLen}</span> دقيقة
+              </div>
+            ))}
         </div>
         {selDrills.length > 0 && (
           <div className="h-1.5 rounded-full bg-silver-100 overflow-hidden mb-3">
@@ -259,9 +300,33 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
         {selDrills.length === 0 ? (
           <div className="rounded-xl border border-dashed border-silver p-4 text-center text-ink-2 text-[13px]">لا توجد تمارين لهذا اليوم بعد.</div>
         ) : (
-          <div className="grid gap-2">
-            {selDrills.map((it, i) => (
-              <DrillRow key={it.id} it={it} index={i} last={i === selDrills.length - 1} group={groupName(it.group_id)} onUp={() => move(it, -1)} onDown={() => move(it, 1)} onRemove={canRemove(it) ? () => remove(it) : undefined} />
+          <div className="grid gap-3">
+            {(split
+              ? [
+                  { key: "all", title: "المجموعتين معاً", list: together, chip: "" },
+                  { key: "A", title: "مجموعة A", list: squadA, chip: SQUAD_CHIP.A },
+                  { key: "B", title: "مجموعة B", list: squadB, chip: SQUAD_CHIP.B },
+                ].filter((sec) => sec.list.length > 0 || sec.key !== "all")
+              : [{ key: "all", title: "", list: selDrills, chip: "" }]
+            ).map((sec) => (
+              <div key={sec.key} className={clsx(split && "rounded-2xl border border-silver-200 p-2", split && sec.key !== "all" && "bg-silver-100/50")}>
+                {split && (
+                  <div className="flex items-center gap-2 px-1 pb-2">
+                    {sec.chip ? <span className={clsx("chip px-2 text-[11px]", sec.chip)}>{sec.key}</span> : <Layers size={14} className="text-ink-2" />}
+                    <span className="font-extrabold text-navy text-[13.5px]">{sec.title}</span>
+                    <span className="ms-auto num text-[11.5px] text-ink-2 font-bold">{mins(sec.list)} د</span>
+                  </div>
+                )}
+                {sec.list.length === 0 ? (
+                  <div className="text-ink-2 text-[12.5px] px-1 pb-1">ما فيه تمارين لهذي المجموعة بعد.</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {sec.list.map((it, i) => (
+                      <DrillRow key={it.id} it={it} index={i} last={i === sec.list.length - 1} group={groupName(it.group_id)} onSquad={(q) => setSquad(it, q)} onUp={() => move(it, -1)} onDown={() => move(it, 1)} onRemove={canRemove(it) ? () => remove(it) : undefined} />
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -403,7 +468,7 @@ export default function TrainingCalendar({ me, today, branches, groups }: { me: 
                     <div className="mt-1 grid gap-0.5 w-full">
                       {its.slice(0, 3).map((it) => (
                         <span key={it.id} className={clsx("truncate rounded-md px-1.5 py-0.5 text-[11px] font-bold", it.kind === "drill" ? "bg-navy text-white" : KIND[it.kind as Exclude<Kind, "drill">].chip)}>
-                          {it.kind === "drill" ? itemDrill(it).title : it.title}
+                          {it.kind === "drill" ? `${it.squad ? it.squad + " · " : ""}${itemDrill(it).title}` : it.title}
                         </span>
                       ))}
                       {its.length > 3 && <span className="text-[10.5px] font-bold text-ink-2 px-1">+{its.length - 3}</span>}
@@ -463,7 +528,9 @@ function fmtTime(t: string) {
   return `${h12}:${String(m).padStart(2, "0")} ${h < 12 ? "ص" : "م"}`;
 }
 
-function DrillRow({ it, index, last, group, onUp, onDown, onRemove }: { it: Item; index: number; last: boolean; group?: string; onUp: () => void; onDown: () => void; onRemove?: () => void }) {
+function DrillRow({ it, index, last, group, onSquad, onUp, onDown, onRemove }: { it: Item; index: number; last: boolean; group?: string; onSquad: (q: Squad) => void; onUp: () => void; onDown: () => void; onRemove?: () => void }) {
+  const squad = it.squad ?? null;
+  const next: Squad = squad === null ? "A" : squad === "A" ? "B" : null;
   const x = itemDrill(it);
   const legacy = it.drills;
   const board = useMemo(() => (!it.sheet_id && legacy ? parseBoard(legacy.board) : null), [it.sheet_id, legacy]);
@@ -496,6 +563,15 @@ function DrillRow({ it, index, last, group, onUp, onDown, onRemove }: { it: Item
           </span>
         </span>
       </Link>
+      <button
+        type="button"
+        onClick={() => onSquad(next)}
+        className={clsx("h-9 min-w-9 px-1.5 rounded-lg text-[12px] font-extrabold shrink-0 border", squad ? clsx(SQUAD_CHIP[squad], "border-transparent") : "bg-white border-silver-200 text-ink-2")}
+        title="المجموعة — اضغط للتغيير"
+        aria-label={`المجموعة: ${squad ?? "معاً"} — اضغط للتغيير`}
+      >
+        {squad ?? "معاً"}
+      </button>
       <div className="flex flex-col shrink-0">
         <button type="button" onClick={onUp} disabled={index === 0} className="h-6 w-7 grid place-items-center rounded text-ink-2 hover:text-navy disabled:opacity-25" aria-label="للأعلى">
           <ArrowUp size={14} />
@@ -513,7 +589,21 @@ function DrillRow({ it, index, last, group, onUp, onDown, onRemove }: { it: Item
   );
 }
 
-function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => void; groups: Group[]; dateLabel: string; onPick: (sheet: SheetLite, index: number | null, groupId: string | null) => void }) {
+function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => void; groups: Group[]; dateLabel: string; onPick: (sheet: SheetLite, index: number | null, groupId: string | null, squad: Squad) => void }) {
+  const [squad, setSquadPick] = useState<Squad>(() => {
+    try {
+      const v = localStorage.getItem("plan-squad");
+      return v === "A" || v === "B" ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const pickSquad = (v: Squad) => {
+    setSquadPick(v);
+    try {
+      localStorage.setItem("plan-squad", v ?? "");
+    } catch {}
+  };
   const supabase = useMemo(() => createClient(), []);
   const [sheets, setSheets] = useState<SheetLite[] | null>(null);
   const [tab, setTab] = useState<"drills" | "sessions">("drills");
@@ -557,6 +647,22 @@ function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => vo
   return (
     <Modal open onClose={onClose} title={`خطة يوم ${dateLabel}`} wide footer={<button type="button" className="btn-primary ms-auto" onClick={onClose}>تم</button>}>
       <div className="grid gap-3">
+        <div className="rounded-2xl bg-navy-50 p-2.5">
+          <div className="text-[12.5px] font-bold text-navy mb-2">التمرين لأي مجموعة؟</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {SQUADS.map((x) => (
+              <button
+                key={x.short}
+                type="button"
+                onClick={() => pickSquad(x.v)}
+                aria-pressed={squad === x.v}
+                className={clsx("h-11 rounded-xl font-extrabold text-[14px] border-2 transition", squad === x.v ? (x.v ? clsx(SQUAD_CHIP[x.v], "border-navy") : "bg-navy text-white border-navy") : "bg-white border-silver-200 text-navy")}
+              >
+                {x.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex gap-1.5">
           {(
             [
@@ -592,14 +698,14 @@ function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => vo
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[55vh] overflow-auto p-0.5">
               {drills.map((x) => {
-                const key = `${x.sheet.id}:${x.index}`;
+                const key = `${x.sheet.id}:${x.index}:${squad ?? ""}`;
                 const done = added.includes(key);
                 return (
                   <button
                     key={key}
                     type="button"
                     onClick={() => {
-                      onPick(x.sheet, x.index, groupId);
+                      onPick(x.sheet, x.index, groupId, squad);
                       setAdded((a) => [...a, key]);
                     }}
                     className={clsx("rounded-xl border overflow-hidden text-start transition bg-white", done ? "border-ice ring-2 ring-ice/40" : "border-silver-200 hover:border-ice")}
@@ -632,14 +738,14 @@ function DrillPicker({ onClose, groups, dateLabel, onPick }: { onClose: () => vo
             {sessions.map((sh) => {
               const list = normalizeDrills(sh.drills);
               const mins = list.reduce((n, d) => n + (parseInt(d.dur, 10) || 0), 0);
-              const done = added.includes(sh.id);
+              const done = added.includes(`${sh.id}:${squad ?? ""}`);
               return (
                 <button
                   key={sh.id}
                   type="button"
                   onClick={() => {
-                    onPick(sh, null, groupId);
-                    setAdded((a) => [...a, sh.id]);
+                    onPick(sh, null, groupId, squad);
+                    setAdded((a) => [...a, `${sh.id}:${squad ?? ""}`]);
                   }}
                   className={clsx("rounded-xl border bg-white p-2.5 text-start flex items-center gap-3 transition", done ? "border-ice ring-2 ring-ice/40" : "border-silver-200 hover:border-ice")}
                 >
