@@ -143,7 +143,8 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
   const expiring = live.filter((r) => r.p.kind === "subscriber" && r.st.state === "expiring").sort((a, b) => (a.st.daysLeft ?? 0) - (b.st.daysLeft ?? 0));
   const noSub = live.filter((r) => r.p.kind === "subscriber" && r.st.state === "none");
   const trials = live.filter((r) => r.p.kind === "trial").sort((a, b) => (b.p.trial_date ?? "").localeCompare(a.p.trial_date ?? ""));
-  const active = live.filter((r) => r.p.kind === "subscriber" && r.st.state === "active");
+  // «مشترك» = اشتراكه ساري، حتى لو بينتهي خلال أسبوع (ينتهي قريباً تنبيه إضافي، مو حالة منفصلة)
+  const active = live.filter((r) => r.p.kind === "subscriber" && (r.st.state === "active" || r.st.state === "expiring"));
 
   // trial funnel for the selected period: registered → attended at least once → subscribed
   const funnel = useMemo(() => {
@@ -163,6 +164,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
       .filter((r) => {
         if (filter === "all" || filter === "archived") return true;
         if (filter === "trial") return r.p.kind === "trial";
+        if (filter === "active") return r.p.kind === "subscriber" && (r.st.state === "active" || r.st.state === "expiring");
         return r.p.kind === "subscriber" && r.st.state === filter;
       })
       .filter((r) => !needle || r.p.full_name.toLowerCase().includes(needle) || r.p.guardian_name.toLowerCase().includes(needle) || r.p.guardian_phone.includes(needle));
