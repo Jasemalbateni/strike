@@ -14,6 +14,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
         development: canEvaluate(profile),
         marketing: canAccessMarketing(profile),
         analytics: profile.role === "owner",
+        finance: profile.role === "owner",
         team: profile.role === "owner",
       }}
     >

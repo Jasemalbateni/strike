@@ -60,6 +60,15 @@ npm run dev
 - نهاية الاشتراك تُحسب من عدد الحصص وأيام تدريب الفرع (`nth_session_date` في SQL و`nthSessionDate` في `lib/players.ts`).
 - إحصاءات: view `player_attendance_stats` (حضور/غياب لكل لاعب) ودالة `period_stats(from, to)` (حصص، حضور، إيجار الملعب، إيراد الاشتراكات، إنفاق التسويق).
 
+### المالية (`/finance`) — للمالك فقط
+
+الجداول: `fin_items` (البنود الشهرية الثابتة: إيجار، رواتب، ميزانيات)، `fin_entries` (دفتر المصروفات لكل شهر)، `fin_deductions` (خصومات الرواتب)، `fin_audit` (سجل التدقيق، يُملأ بـ triggers).
+
+- كلها محمية بـ RLS على `is_owner()`، وما في حذف (لا policy ولا صلاحية DELETE) — الإلغاء بـ `voided_at` + السبب.
+- `fin_open_month(month)` ينزّل البنود الثابتة والرواتب للشهر (مرة وحدة لكل بند/شهر).
+- الدخل = الاشتراكات المدفوعة حسب `paid_at`. رسوم الدفع من `subscriptions.fee` (كي-نت 0.200 تلقائي، الفيزا يدوي) وطريقة الدفع `subscriptions.pay_method`.
+- الحسابات في `lib/finance.ts` (`summarize`). ملف الـ migration: `supabase/migrations/20261112_finance_owner_only.sql`.
+
 ### التمارين (لوحة الرسم) والتقويم
 
 - **التمارين** (`/drills`): مكتبة (المعتمد)، بانتظار الاعتماد، مسوداتي. التمرين الجديد `/drills/new`، والتمرين `/drills/[id]`.

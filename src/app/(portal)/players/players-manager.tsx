@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { format, parseISO, subDays, differenceInCalendarDays } from "date-fns";
 import clsx from "clsx";
+import { KNET_FEE, PAY_METHODS, PRICE_FULL, PRICE_SIBLING, type PayMethod } from "@/lib/finance";
 import { AlertTriangle, Archive, ArchiveRestore, BadgeCheck, ClipboardCheck, FlaskConical, MessageCircle, Pencil, Phone, Plus, RefreshCw, Search, Sparkles, Trash2, TrendingUp, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field, EmptyState } from "@/components/ui";
@@ -825,6 +826,8 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
   const [endManual, setEndManual] = useState("");
   const [amount, setAmount] = useState(String(latest?.amount ?? lastAmount));
   const [paid, setPaid] = useState(true);
+  const [method, setMethod] = useState<PayMethod>("knet");
+  const [fee, setFee] = useState(String(KNET_FEE));
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -838,7 +841,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
     setBusy(true);
     const res = await supabase
       .from("subscriptions")
-      .insert({ player_id: player.id, start_date: start, end_date: end, sessions_count: Number(count) || 12, amount: Number(amount) || 0, paid, paid_at: paid ? today : null, notes: notes.trim() })
+      .insert({ player_id: player.id, start_date: start, end_date: end, sessions_count: Number(count) || 12, amount: Number(amount) || 0, paid, paid_at: paid ? today : null, pay_method: method, fee: paid ? Number(fee) || 0 : 0, notes: notes.trim() })
       .select("*")
       .single();
     if (res.error || !res.data) {
@@ -899,14 +902,47 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
         </Field>
         <Field label="المبلغ (د.ك)">
           <input className="field num" dir="ltr" type="number" inputMode="decimal" min={0} step="0.5" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <span className="flex gap-2">
+            <button type="button" onClick={() => setAmount(String(PRICE_FULL))} className={clsx("chip h-9 px-3 num", Number(amount) === PRICE_FULL ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+              {PRICE_FULL} عادي
+            </button>
+            <button type="button" onClick={() => setAmount(String(PRICE_SIBLING))} className={clsx("chip h-9 px-3 num", Number(amount) === PRICE_SIBLING ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}>
+              {PRICE_SIBLING} أخوان
+            </button>
+          </span>
         </Field>
         <label className="flex items-center gap-3 sm:col-span-2 cursor-pointer select-none">
           <input type="checkbox" className="h-5 w-5 accent-[var(--navy)]" checked={paid} onChange={(e) => setPaid(e.target.checked)} />
           <span className="font-bold text-navy text-sm">مدفوع</span>
           {!paid && <span className="chip bg-error-100 text-error text-[10px]">يظهر كغير مدفوع بسجل اللاعب</span>}
         </label>
+        {paid && (
+          <>
+            <Field label="طريقة الدفع" group>
+              <div className="flex flex-wrap gap-2">
+                {PAY_METHODS.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    aria-pressed={method === m.value}
+                    onClick={() => {
+                      setMethod(m.value);
+                      if (m.fee !== null) setFee(String(m.fee));
+                    }}
+                    className={clsx("chip h-10 px-3.5 text-sm", method === m.value ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label={method === "card" ? "رسوم الدفع (اكتبها من UPayments)" : "رسوم الدفع (د.ك)"}>
+              <input className="field num" dir="ltr" type="number" inputMode="decimal" min={0} step="0.001" value={fee} onChange={(e) => setFee(e.target.value)} />
+            </Field>
+          </>
+        )}
         <Field label="ملاحظة" className="sm:col-span-2">
-          <input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="خصم، دفع جزئي، طريقة الدفع…" />
+          <input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="خصم، دفع جزئي…" />
         </Field>
         <p className="sm:col-span-2 text-ink-2 text-xs">
           النهاية تُحسب تلقائياً حسب أيام تدريب الفرع ({days.map((d) => ["أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"][d]).join("، ")}) — تقدر تعدّلها يدوياً.
