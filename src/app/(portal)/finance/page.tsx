@@ -9,7 +9,7 @@ import FinanceBoard from "./finance-board";
 
 export const metadata: Metadata = { title: "المالية" };
 
-type SubRow = { id: string; player_id: string; start_date: string; amount: number; paid: boolean; paid_at: string | null; pay_method: PayMethod; fee: number; players: { full_name: string; branch_id: string | null } | { full_name: string; branch_id: string | null }[] | null };
+type SubRow = { id: string; player_id: string; start_date: string; amount: number; paid: boolean; paid_at: string | null; pay_method: PayMethod; fee: number; pay_ref: string | null; deposit_date: string | null; payer_name: string | null; players: { full_name: string; branch_id: string | null } | { full_name: string; branch_id: string | null }[] | null };
 
 /** everything money-related for one month. RLS returns nothing for non-owners. */
 async function loadMonth(supabase: SupabaseClient, month: string): Promise<MonthData> {
@@ -18,7 +18,7 @@ async function loadMonth(supabase: SupabaseClient, month: string): Promise<Month
     supabase.from("fin_entries").select("*").eq("month", month).order("entry_date").order("created_at"),
     supabase
       .from("subscriptions")
-      .select("id, player_id, start_date, amount, paid, paid_at, pay_method, fee, players(full_name, branch_id)")
+      .select("id, player_id, start_date, amount, paid, paid_at, pay_method, fee, pay_ref, deposit_date, payer_name, players(full_name, branch_id)")
       .or(`and(paid_at.gte.${month},paid_at.lt.${end}),and(start_date.gte.${month},start_date.lt.${end})`)
       .order("paid_at", { ascending: false }),
   ]);
@@ -30,7 +30,7 @@ async function loadMonth(supabase: SupabaseClient, month: string): Promise<Month
     deductions: ((deds.data ?? []) as FinDeduction[]).map((d) => ({ ...d, amount: num(d.amount) })),
     subs: ((subs.data ?? []) as unknown as SubRow[]).map((s) => {
       const p = Array.isArray(s.players) ? s.players[0] : s.players;
-      return { id: s.id, player_id: s.player_id, player_name: p?.full_name ?? "—", branch_id: p?.branch_id ?? null, start_date: s.start_date, amount: num(s.amount), paid: s.paid, paid_at: s.paid_at, pay_method: s.pay_method ?? "knet", fee: num(s.fee) } satisfies FinSub;
+      return { id: s.id, player_id: s.player_id, player_name: p?.full_name ?? "—", branch_id: p?.branch_id ?? null, start_date: s.start_date, amount: num(s.amount), paid: s.paid, paid_at: s.paid_at, pay_method: s.pay_method ?? "knet", fee: num(s.fee), pay_ref: s.pay_ref ?? "", deposit_date: s.deposit_date, payer_name: s.payer_name ?? "" } satisfies FinSub;
     }),
   };
 }

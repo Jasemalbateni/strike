@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { format, parseISO, subDays, differenceInCalendarDays } from "date-fns";
 import clsx from "clsx";
-import { KNET_FEE, PAY_METHODS, PRICE_FULL, PRICE_SIBLING, type PayMethod } from "@/lib/finance";
+import { KNET_FEE, PAY_METHODS, PRICE_FULL, PRICE_SIBLING, cardFee, type PayMethod } from "@/lib/finance";
 import { AlertTriangle, Archive, ArchiveRestore, BadgeCheck, ClipboardCheck, FlaskConical, MessageCircle, Pencil, Phone, Plus, RefreshCw, Search, Sparkles, Trash2, TrendingUp, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Modal, Field, EmptyState } from "@/components/ui";
@@ -828,6 +828,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
   const [paid, setPaid] = useState(true);
   const [method, setMethod] = useState<PayMethod>("knet");
   const [fee, setFee] = useState(String(KNET_FEE));
+  const [payRef, setPayRef] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -841,7 +842,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
     setBusy(true);
     const res = await supabase
       .from("subscriptions")
-      .insert({ player_id: player.id, start_date: start, end_date: end, sessions_count: Number(count) || 12, amount: Number(amount) || 0, paid, paid_at: paid ? today : null, pay_method: method, fee: paid ? Number(fee) || 0 : 0, notes: notes.trim() })
+      .insert({ player_id: player.id, start_date: start, end_date: end, sessions_count: Number(count) || 12, amount: Number(amount) || 0, paid, paid_at: paid ? today : null, pay_method: method, fee: paid ? Number(fee) || 0 : 0, pay_ref: payRef.replace(/^#/, "").trim(), notes: notes.trim() })
       .select("*")
       .single();
     if (res.error || !res.data) {
@@ -927,7 +928,7 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
                     aria-pressed={method === m.value}
                     onClick={() => {
                       setMethod(m.value);
-                      if (m.fee !== null) setFee(String(m.fee));
+                      setFee(String(m.fee ?? cardFee(Number(amount) || 0)));
                     }}
                     className={clsx("chip h-10 px-3.5 text-sm", method === m.value ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}
                   >
@@ -936,8 +937,11 @@ function SubscriptionFormModal({ player, convert, branch, latest, lastAmount, to
                 ))}
               </div>
             </Field>
-            <Field label={method === "card" ? "رسوم الدفع (اكتبها من UPayments)" : "رسوم الدفع (د.ك)"}>
+            <Field label={method === "card" ? "رسوم الدفع (2.5% + 100 فلس)" : "رسوم الدفع (د.ك)"}>
               <input className="field num" dir="ltr" type="number" inputMode="decimal" min={0} step="0.001" value={fee} onChange={(e) => setFee(e.target.value)} />
+            </Field>
+            <Field label="رقم فاتورة UPayments (اختياري)" className="sm:col-span-2">
+              <input className="field num" dir="ltr" inputMode="numeric" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="2026110142198095" />
             </Field>
           </>
         )}

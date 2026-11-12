@@ -44,6 +44,9 @@ export type Subscription = {
   /** how it was paid + the gateway fee (finance section) — optional until the DB migration is applied */
   pay_method?: "knet" | "card" | "cash" | "transfer";
   fee?: number;
+  pay_ref?: string;
+  deposit_date?: string | null;
+  payer_name?: string;
   notes: string;
   created_at: string;
 };

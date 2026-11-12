@@ -4,6 +4,8 @@ import { addMonths, format, parseISO } from "date-fns";
 export const FIN_START = "2026-11-01";
 /** default UPayments KNET fee per payment (KD) */
 export const KNET_FEE = 0.2;
+/** UPayments card fee (Visa / Mastercard, also Apple Pay on a credit card): 2.5% + 0.100 KD */
+export const cardFee = (amount: number) => Math.round((amount * 0.025 + 0.1) * 1000) / 1000;
 /** subscription prices (KD) */
 export const PRICE_FULL = 45;
 export const PRICE_SIBLING = 40;
@@ -11,7 +13,7 @@ export const PRICE_SIBLING = 40;
 export type PayMethod = "knet" | "card" | "cash" | "transfer";
 export const PAY_METHODS: { value: PayMethod; label: string; fee: number | null }[] = [
   { value: "knet", label: "كي-نت", fee: KNET_FEE },
-  { value: "card", label: "فيزا / ماستر", fee: null }, // fee varies — typed by hand
+  { value: "card", label: "فيزا / ماستر", fee: null }, // 2.5% + 0.100 — see cardFee()
   { value: "cash", label: "كاش", fee: 0 },
   { value: "transfer", label: "تحويل", fee: 0 },
 ];
@@ -106,6 +108,10 @@ export type FinSub = {
   paid_at: string | null;
   pay_method: PayMethod;
   fee: number;
+  /** UPayments invoice number, the day the money reached the bank, and who paid */
+  pay_ref: string;
+  deposit_date: string | null;
+  payer_name: string;
 };
 
 export type MonthData = { entries: FinEntry[]; deductions: FinDeduction[]; subs: FinSub[] };
@@ -197,4 +203,62 @@ export function summarize(data: MonthData, month: string): Summary {
     marketingSpent: cat.get("marketing") ?? 0,
     incomeByBranch: [...br.entries()].map(([branch_id, v]) => ({ branch_id, ...v })).sort((a, b) => b.total - a.total),
   };
+}
+
+/* ---------- export ---------- */
+const csvCell = (v: string | number | null | undefined) => {
+  const t = v == null ? "" : String(v);
+  return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+const kd = (n: number) => (Math.round(n * 1000) / 1000).toFixed(3);
+
+/** the month as one tidy ledger (CSV, opens in Excel): income rows, expense rows, then the totals */
+export function monthCsv(data: MonthData, month: string, branchName: (id: string | null) => string): string {
+  const sum = summarize(data, month);
+  const head = ["التاريخ", "النوع", "البند", "الوصف", "الفرع", "طريقة الدفع", "رقم فاتورة UPayments", "تاريخ الإيداع بالبنك", "المبلغ", "رسوم الدفع", "الصافي", "الحالة", "ملاحظات"];
+  const rows: (string | number | null)[][] = [];
+  const paid = data.subs.filter((s) => paidInMonth(s, month)).sort((a, b) => (a.paid_at ?? a.start_date).localeCompare(b.paid_at ?? b.start_date));
+  for (const s of paid) {
+    rows.push([s.paid_at ?? s.start_date, "دخل", "اشتراك", s.player_name, branchName(s.branch_id), payLabel(s.pay_method), s.pay_ref ? `#${s.pay_ref}` : "", s.deposit_date, kd(s.amount), kd(s.fee), kd(s.amount - s.fee), "مدفوع", s.payer_name && s.payer_name !== s.player_name ? `الدافع: ${s.payer_name}` : ""]);
+  }
+  for (const s of sum.unpaid) rows.push([s.start_date, "دخل", "اشتراك", s.player_name, branchName(s.branch_id), "", "", "", kd(s.amount), "", "", "غير مدفوع", "لا يدخل بالمجموع"]);
+  for (const e of data.entries) {
+    const net = entryNet(e, data.deductions);
+    const ded = e.amount - net;
+    rows.push([
+      e.entry_date,
+      "مصروف",
+      catLabel(e.category),
+      e.title,
+      branchName(e.branch_id),
+      "",
+      "",
+      e.paid_at,
+      kd(e.amount),
+      "",
+      kd(e.voided_at ? 0 : net),
+      e.voided_at ? "ملغي" : e.paid ? "مدفوع" : "مستحق",
+      [ded > 0 ? `خصومات ${kd(ded)}` : "", e.notes, e.voided_at ? `سبب الإلغاء: ${e.void_reason}` : ""].filter(Boolean).join(" · "),
+    ]);
+  }
+  if (sum.fees > 0) rows.push([shiftDayIso(monthEnd(month)), "مصروف", catLabel("fees"), "مجموع رسوم الدفع للشهر", "عام", "", "", "", kd(sum.fees), "", kd(sum.fees), "مخصوم من الإيداع", ""]);
+  const blank: (string | number | null)[] = [];
+  const total = (label: string, v: number) => ["", "", label, "", "", "", "", "", "", "", kd(v), "", ""];
+  const lines = [
+    [`سترايك — التقرير المالي — ${monthLabel(month)}`],
+    blank,
+    head,
+    ...rows,
+    blank,
+    total("مجموع الدخل (قبل الرسوم)", sum.income),
+    total("مجموع المصروف (مع رسوم الدفع)", sum.expenses),
+    total("الصافي", sum.net),
+    total("منها مصروف مستحق لم يُدفع", sum.due),
+  ];
+  return "\uFEFF" + lines.map((r) => r.map(csvCell).join(",")).join("\r\n");
+}
+function shiftDayIso(iso: string) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }

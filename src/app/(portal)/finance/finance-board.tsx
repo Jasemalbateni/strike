@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Check, ChevronLeft, ChevronRight, Pencil, Plus, TrendingDown, TrendingUp } from "lucide-react";
+import { Ban, Check, ChevronLeft, ChevronRight, Download, Pencil, Plus, TrendingDown, TrendingUp } from "lucide-react";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase/client";
 import { EmptyState, Field, Modal } from "@/components/ui";
@@ -15,11 +15,13 @@ import {
   ITEM_KIND_LABEL,
   PAY_METHODS,
   PRICE_FULL,
+  cardFee,
   catLabel,
   deductionsOf,
   entryNet,
   fmtKD,
   monthEnd,
+  monthCsv,
   monthLabel,
   paidInMonth,
   payLabel,
@@ -97,6 +99,18 @@ export default function FinanceBoard({ month, today, canPrev, canNext, data, pre
     return true;
   }
 
+  function exportCsv() {
+    const blob = new Blob([monthCsv(data, month, branchName)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `strike-finance-${month.slice(0, 7)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const togglePaid = (e: FinEntry) => run(() => supabase.from("fin_entries").update({ paid: !e.paid, paid_at: e.paid ? null : today }).eq("id", e.id));
 
   const live = data.entries.filter((e) => !e.voided_at);
@@ -126,6 +140,10 @@ export default function FinanceBoard({ month, today, canPrev, canNext, data, pre
           </button>
         ))}
       </div>
+
+      <button className="btn-outline self-start" onClick={exportCsv}>
+        <Download size={17} /> تصدير تقرير {monthLabel(month)} (Excel)
+      </button>
 
       {error && (
         <div role="alert" className="rounded-xl bg-error-100 text-error font-bold text-sm px-4 py-3">
@@ -313,6 +331,13 @@ export default function FinanceBoard({ month, today, canPrev, canNext, data, pre
                     <span className="block text-ink-2 text-xs num">
                       {fmtDate(s.paid_at ?? s.start_date)} · {payLabel(s.pay_method)} · {branchName(s.branch_id)}
                     </span>
+                    {s.pay_ref ? (
+                      <span className="block text-ink-2 text-[11px] num" dir="ltr" style={{ textAlign: "right" }}>
+                        #{s.pay_ref}
+                      </span>
+                    ) : (
+                      <span className="block text-gold text-[11px] font-bold">بدون رقم فاتورة</span>
+                    )}
                   </span>
                   <span className="text-end shrink-0">
                     <span className="block num font-bold text-navy text-[17px]">{fmtKD(s.amount)}</span>
@@ -405,7 +430,7 @@ export default function FinanceBoard({ month, today, canPrev, canNext, data, pre
         <DeductionModal entry={dialog.entry} month={month} defaultDate={defaultDate} busy={busy} onClose={() => setDialog(null)} onSave={(v) => run(() => supabase.from("fin_deductions").insert({ ...v, entry_id: dialog.entry.id }))} />
       )}
       {dialog?.t === "void" && <VoidModal label={dialog.label} busy={busy} onClose={() => setDialog(null)} onSave={(reason) => run(() => supabase.from(dialog.table).update({ voided_at: new Date().toISOString(), void_reason: reason }).eq("id", dialog.id))} />}
-      {dialog?.t === "sub" && <SubModal sub={dialog.sub} busy={busy} onClose={() => setDialog(null)} onSave={(pay_method, fee) => run(() => supabase.from("subscriptions").update({ pay_method, fee }).eq("id", dialog.sub.id))} />}
+      {dialog?.t === "sub" && <SubModal sub={dialog.sub} busy={busy} onClose={() => setDialog(null)} onSave={(v) => run(() => supabase.from("subscriptions").update(v).eq("id", dialog.sub.id))} />}
       {dialog?.t === "item" && (
         <ItemModal
           item={dialog.item}
@@ -771,16 +796,18 @@ function VoidModal({ label, busy, onClose, onSave }: { label: string; busy: bool
   );
 }
 
-function SubModal({ sub, busy, onClose, onSave }: { sub: FinSub; busy: boolean; onClose: () => void; onSave: (m: PayMethod, fee: number) => void }) {
+function SubModal({ sub, busy, onClose, onSave }: { sub: FinSub; busy: boolean; onClose: () => void; onSave: (v: { pay_method: PayMethod; fee: number; pay_ref: string; deposit_date: string | null }) => void }) {
   const [method, setMethod] = useState<PayMethod>(sub.pay_method);
   const [fee, setFee] = useState(String(sub.fee));
+  const [ref, setRef] = useState(sub.pay_ref);
+  const [deposit, setDeposit] = useState(sub.deposit_date ?? "");
   return (
     <Modal open onClose={onClose} title={`دفعة ${sub.player_name}`} footer={<Footer onClose={onClose} form="fin-sub" busy={busy} />}>
       <form
         id="fin-sub"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(method, Number(fee) || 0);
+          onSave({ pay_method: method, fee: Number(fee) || 0, pay_ref: ref.replace(/^#/, "").trim(), deposit_date: deposit || null });
         }}
         className="grid gap-4"
       >
@@ -794,7 +821,7 @@ function SubModal({ sub, busy, onClose, onSave }: { sub: FinSub; busy: boolean; 
                 aria-pressed={method === m.value}
                 onClick={() => {
                   setMethod(m.value);
-                  if (m.fee !== null) setFee(String(m.fee));
+                  setFee(String(m.fee ?? cardFee(sub.amount)));
                 }}
                 className={clsx("chip h-10 px-4 text-sm", method === m.value ? "bg-navy text-white" : "bg-white border border-silver-200 text-navy")}
               >
@@ -806,7 +833,13 @@ function SubModal({ sub, busy, onClose, onSave }: { sub: FinSub; busy: boolean; 
         <Field label="رسوم الدفع (د.ك)">
           <AmountInput value={fee} onChange={setFee} />
         </Field>
-        {method === "card" && <p className="text-ink-2 text-xs">رسوم الفيزا تختلف — اكتب الرسوم الفعلية من تقرير UPayments.</p>}
+        {method === "card" && <p className="text-ink-2 text-xs">الفيزا / ماستر (وأبل باي على بطاقة ائتمان): 2.5% + 100 فلس. أبل باي على بطاقة كي-نت يبقى 200 فلس — اختر «كي-نت».</p>}
+        <Field label="رقم فاتورة UPayments">
+          <input className="field num" dir="ltr" inputMode="numeric" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="2026110142198095" />
+        </Field>
+        <Field label="تاريخ الإيداع بالبنك">
+          <input className="field num" dir="ltr" type="date" value={deposit} onChange={(e) => setDeposit(e.target.value)} />
+        </Field>
       </form>
     </Modal>
   );
