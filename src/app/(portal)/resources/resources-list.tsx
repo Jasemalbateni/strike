@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Presentation, FileText, MessageSquare, Pin, Clock, EyeOff } from "lucide-react";
+import { Plus, Presentation, FileText, MessageSquare, Pin, Clock, EyeOff, Activity } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import clsx from "clsx";
 import { EmptyState } from "@/components/ui";
 import { CATEGORIES, categoryLabel } from "@/lib/resources";
+import { bidi } from "@/lib/bidi";
 
 export type Card = {
   id: string;
@@ -30,6 +31,8 @@ export default function ResourcesList({ cards, isOwner }: { cards: Card[]; isOwn
   const [kind, setKind] = useState<"all" | "article" | "presentation">("all");
   const used = new Set(cards.map((c) => c.category));
   const shown = cards.filter((c) => (cat === "all" || c.category === cat) && (kind === "all" || c.kind === kind));
+  // built-in interactive resource (lives in code, not in the resources table)
+  const showLab = cat === "all" && kind !== "presentation";
 
   return (
     <div className="flex flex-col gap-4">
@@ -69,10 +72,46 @@ export default function ResourcesList({ cards, isOwner }: { cards: Card[]; isOwn
         )}
       </div>
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && !showLab ? (
         <EmptyState title={cards.length ? "ما فيه شي بهالتصنيف" : "المصادر فاضية"} hint={isOwner ? "ابدأ بأول موضوع أو ارفع برزنتيشن آخر اجتماع." : "أي موضوع تنشره الإدارة بيظهر هنا."} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {showLab && (
+            <Link href="/resources/movement-lab" className="card overflow-hidden flex flex-col hover:border-ice transition group">
+              <div className="aspect-[16/9] relative overflow-hidden grid place-items-center bg-[radial-gradient(circle_at_30%_20%,#26407a,#0f1b3a)]">
+                <svg viewBox="0 0 200 150" className="h-[78%] group-hover:scale-[1.04] transition" aria-hidden="true">
+                  <line x1="20" y1="132" x2="180" y2="132" stroke="#C7CED9" strokeWidth="2" strokeLinecap="round" opacity=".6" />
+                  <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="98,74 82,97 67,121" stroke="#8fa3d6" strokeWidth="7" />
+                    <polyline points="106,36 118,52 129,38" stroke="#8fa3d6" strokeWidth="6" />
+                    <polyline points="106,36 98,74" stroke="#fff" strokeWidth="9" />
+                    <polyline points="98,74 122,88 117,115" stroke="#fff" strokeWidth="7" />
+                    <polyline points="106,36 93,51 95,69" stroke="#fff" strokeWidth="6" />
+                  </g>
+                  <circle cx="109" cy="24" r="9.5" fill="#fff" />
+                  <circle cx="140" cy="125" r="6.5" fill="#4DA8FF" stroke="#fff" strokeWidth="1.5" />
+                </svg>
+                <div className="absolute top-2.5 start-2.5 flex gap-1.5">
+                  <span className="chip bg-gold text-navy-900 text-[11px] gap-1">
+                    <Activity size={11} /> تفاعلي
+                  </span>
+                </div>
+              </div>
+              <div className="p-4 flex flex-col gap-1.5 flex-1">
+                <span className="text-ice-600 text-[12px] font-bold">الإعداد البدني</span>
+                <h3 className="font-extrabold text-navy text-[16px] leading-snug line-clamp-2">{bidi("المختبر الحركي: الجانب البدني لفئة 5–8")}</h3>
+                <p className="text-ink-2 text-[13.5px] line-clamp-2">شخصيات متحركة تشرح آلية التنفيذ لكل صفة بدنية، مع التقسيم والأخطاء وحلولها والخطة الشهرية وبنك الألعاب.</p>
+                <div className="mt-auto pt-2 flex items-center gap-3 text-[12px] text-ink-2">
+                  <span>
+                    <span className="num">49</span> حركة
+                  </span>
+                  <span>
+                    <span className="num">16</span> بطاقة
+                  </span>
+                </div>
+              </div>
+            </Link>
+          )}
           {shown.map((c) => (
             <Link key={c.id} href={`/resources/${c.id}`} className={clsx("card overflow-hidden flex flex-col hover:border-ice transition group", c.unread && "ring-2 ring-gold/60")}>
               <div className="aspect-[16/9] bg-navy relative overflow-hidden">
