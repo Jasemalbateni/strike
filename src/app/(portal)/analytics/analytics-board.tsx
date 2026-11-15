@@ -13,7 +13,7 @@ import { NOT_REGISTERED_REASONS } from "@/lib/players";
 import type { Player, Subscription } from "@/lib/players";
 
 export type Data = {
-  players: { id: string; full_name: string; group_id: string | null; branch_id: string | null; kind: "subscriber" | "trial"; source: string; trial_date: string | null; converted_at: string | null; archived: boolean; created_at: string; trial_outcome: "registered" | "not_registered" | "removed" | null; trial_outcome_reason: string; trial_outcome_at: string | null }[];
+  players: { id: string; full_name: string; group_id: string | null; branch_id: string | null; kind: "subscriber" | "trial" | "guest"; source: string; trial_date: string | null; converted_at: string | null; archived: boolean; created_at: string; trial_outcome: "registered" | "not_registered" | "removed" | null; trial_outcome_reason: string; trial_outcome_at: string | null }[];
   subs: { id: string; player_id: string; start_date: string; end_date: string; amount: number; paid: boolean; paid_at: string | null }[];
   sessions: { id: string; branch_id: string; session_date: string; cancelled: boolean }[];
   attendance: { session_id: string; player_id: string; status: "present" | "absent" | "late" | "excused" }[];

@@ -213,6 +213,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
   }
 
   const alertCount = expired.length + expiring.length + trials.length + noSub.length;
+  const guests = live.filter((r) => r.p.kind === "guest").length;
 
   return (
     <div className="px-4 sm:px-8 py-5 sm:py-8 max-w-6xl">
@@ -221,7 +222,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
         <div>
           <h1 className="display text-navy text-[26px] sm:text-[36px] leading-none">اللاعبين</h1>
           <p className="text-ink-2 text-sm mt-1.5">
-            <span className="num">{active.length}</span> مشترك فعّال · <span className="num">{trials.length}</span> تجربة · <span className="num">{live.length}</span> إجمالي
+            <span className="num">{active.length}</span> مشترك فعّال · <span className="num">{trials.length}</span> تجربة · <span className="num">{live.length - guests}</span> إجمالي{guests > 0 && <> · <span className="num">{guests}</span> ضيف</>}
           </p>
         </div>
         <div className="flex gap-2">
@@ -411,7 +412,9 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
                         {r.p.guardian_phone && <PhoneLinks phone={r.p.guardian_phone} compact />}
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        {r.p.kind === "trial" ? (
+                        {r.p.kind === "guest" ? (
+                          <span className="chip bg-navy text-white">ضيف — بدون اشتراك</span>
+                        ) : r.p.kind === "trial" ? (
                           <span className="chip bg-gold text-navy-900">تجربة{r.p.trial_date ? ` · ${fmtDate(r.p.trial_date)}` : ""}</span>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -430,7 +433,7 @@ export default function PlayersManager({ me, today, branches, groups, initialPla
                           <button onClick={() => archive(r.p, false)} className="btn-outline h-8 px-2.5 text-xs">
                             <ArchiveRestore size={13} /> استرجاع
                           </button>
-                        ) : r.p.kind === "trial" ? (
+                        ) : r.p.kind === "guest" ? null : r.p.kind === "trial" ? (
                           <button onClick={() => setSubForm({ player: r.p, convert: true })} className="btn-accent h-8 px-2.5 text-xs">
                             <BadgeCheck size={13} /> اشتراك
                           </button>
@@ -570,7 +573,7 @@ function PlayerCard({ r, group, onOpen, onRenew }: { r: Row; group?: string; onO
         <span className="min-w-0">
           <span className="block font-extrabold text-navy text-[15px] leading-tight truncate">{r.p.full_name}</span>
           <span className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {trial ? <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span> : <span className={clsx("chip px-1.5 text-[10px]", STATE_CHIP[r.st.state])}>{SUB_LABEL[r.st.state]}</span>}
+            {r.p.kind === "guest" ? <span className="chip bg-navy text-white px-1.5 text-[10px]">ضيف</span> : trial ? <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span> : <span className={clsx("chip px-1.5 text-[10px]", STATE_CHIP[r.st.state])}>{SUB_LABEL[r.st.state]}</span>}
             {group && <span className="text-ink-2 text-[11px]">{group}</span>}
             {r.sub && !trial && <span className="num text-ink-2 text-[11px]">→ {fmtDate(r.sub.end_date)}</span>}
             {total > 0 && (
@@ -581,7 +584,7 @@ function PlayerCard({ r, group, onOpen, onRenew }: { r: Row; group?: string; onO
           </span>
         </span>
       </button>
-      {!r.p.archived && (
+      {!r.p.archived && r.p.kind !== "guest" && (
         <button onClick={onRenew} className={clsx("h-9 px-2.5 text-xs shrink-0", trial ? "btn-accent" : r.st.state === "active" ? "btn-ghost" : "btn-primary")}>
           {trial ? <BadgeCheck size={13} /> : <RefreshCw size={13} />} {trial ? "اشتراك" : "تجديد"}
         </button>
@@ -614,7 +617,7 @@ function PlayerDetail({ r, subs, branch, group, isOwner, onClose, onEdit, onRene
             <button onClick={onEdit} className="btn-outline h-10 px-3 text-sm whitespace-nowrap">
               <Pencil size={15} /> تعديل
             </button>
-            {!p.archived && (
+            {!p.archived && p.kind !== "guest" && (
               <button onClick={onRenew} className={clsx("h-10 px-3 text-sm whitespace-nowrap", trial ? "btn-accent" : "btn-primary")}>
                 {trial ? <BadgeCheck size={15} /> : <RefreshCw size={15} />} {trial ? "تحويل لمشترك" : "تجديد"}
               </button>
@@ -624,7 +627,7 @@ function PlayerDetail({ r, subs, branch, group, isOwner, onClose, onEdit, onRene
       }
     >
       <div className="flex flex-wrap items-center gap-1.5 mb-4">
-        {trial ? <span className="chip bg-gold text-navy-900">تجربة</span> : <span className={clsx("chip", STATE_CHIP[r.st.state])}>{SUB_LABEL[r.st.state]}</span>}
+        {p.kind === "guest" ? <span className="chip bg-navy text-white">ضيف — يحضر بدون اشتراك ولا ينحسب في الإحصائيات</span> : trial ? <span className="chip bg-gold text-navy-900">تجربة</span> : <span className={clsx("chip", STATE_CHIP[r.st.state])}>{SUB_LABEL[r.st.state]}</span>}
         {p.archived && <span className="chip bg-silver-200 text-navy-900">مؤرشف</span>}
         {group && <span className="chip bg-navy-50 text-navy">{bidi(group.name)}</span>}
         {branch && <span className="chip bg-silver-100 text-ink-2">{branch.name}</span>}
@@ -757,10 +760,10 @@ function PlayerFormModal({ player, branches, groups, today, onClose, onSaved, on
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} required placeholder="الاسم الثلاثي" />
         </Field>
         {!player && (
-          <div className="sm:col-span-2 grid grid-cols-2 gap-1 rounded-xl bg-silver-100 p-1">
-            {(["subscriber", "trial"] as const).map((k) => (
+          <div className="sm:col-span-2 grid grid-cols-3 gap-1 rounded-xl bg-silver-100 p-1">
+            {(["subscriber", "trial", "guest"] as const).map((k) => (
               <button key={k} type="button" onClick={() => setKind(k)} className={clsx("h-10 rounded-lg font-bold text-sm transition", kind === k ? (k === "trial" ? "bg-gold text-navy-900" : "bg-navy text-white") : "text-ink-2")}>
-                {k === "subscriber" ? "مشترك" : "تجربة"}
+                {k === "subscriber" ? "مشترك" : k === "trial" ? "تجربة" : "ضيف"}
               </button>
             ))}
           </div>

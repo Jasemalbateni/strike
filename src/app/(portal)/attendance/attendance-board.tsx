@@ -371,6 +371,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                     <span className="block font-extrabold text-navy text-[16px] leading-tight truncate">{r.p.full_name}</span>
                     <span className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       {trial && (r.p.trial_outcome === "registered" ? <span className="chip bg-[#1a8f5f] text-white px-1.5 text-[10px]">سجّل ✓{me.canManage ? " — أضف الاشتراك" : ""}</span> : <span className="chip bg-gold text-navy-900 px-1.5 text-[10px]">تجربة</span>)}
+                      {r.p.kind === "guest" && <span className="chip bg-navy text-white px-1.5 text-[10px]">ضيف</span>}
                       {group && <span className="text-ink-2 text-[11px]">{bidi(group.name)}</span>}
                       {r.p.age && <span className="num text-ink-2 text-[11px]">{r.p.age} سنوات</span>}
                       {me.canManage && r.st.state === "expired" && <span className="chip bg-error text-white px-1.5 text-[10px]">انتهى الاشتراك</span>}

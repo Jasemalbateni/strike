@@ -27,16 +27,19 @@ export default async function AnalyticsPage() {
     supabase.from("mk_metrics").select("week_start, trials, registrations, views, platform").order("week_start"),
   ]);
 
+  // guests (attend without a subscription) never count in any rate or total
+  const guestIds = new Set(players.filter((p) => (p.kind as string) === "guest").map((p) => p.id));
+
   return (
     <div className="px-4 sm:px-8 py-6 sm:py-10 max-w-6xl">
       <PageHeader title="التحليلات" subtitle="صورة الأكاديمية بالأرقام — تشوفها أنت بس" />
       <AnalyticsBoard
         today={todayKW()}
         data={{
-          players,
+          players: players.filter((p) => p.kind !== "guest"),
           subs,
           sessions,
-          attendance,
+          attendance: attendance.filter((a) => !guestIds.has(a.player_id)),
           groups: (groups.data ?? []) as Data["groups"],
           sheets,
           evals,

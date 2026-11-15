@@ -1,6 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 
-export type PlayerKind = "subscriber" | "trial";
+/** guest = attends and gets evaluated without a subscription (e.g. the owner's son); never counted in stats */
+export type PlayerKind = "subscriber" | "trial" | "guest";
 export type TrialOutcome = "registered" | "not_registered" | "removed";
 
 /** why a trial didn't register — quick picks (free text allowed too) */
