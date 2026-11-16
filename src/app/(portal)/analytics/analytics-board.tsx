@@ -86,7 +86,7 @@ export default function AnalyticsBoard({ today, data }: { today: string; data: D
     // attendance
     const marks = (test: (d: string) => boolean) => attendance.filter((a) => {
       const s = sessionById.get(a.session_id);
-      return s && !s.cancelled && test(s.session_date) && a.status !== "excused";
+      return s && !s.cancelled && test(s.session_date); // no "excused" any more: every non-present mark is an absence
     });
     const rate = (list: Data["attendance"]) => pct(list.filter((a) => a.status === "present" || a.status === "late").length, list.length);
     const att = marks(inP);

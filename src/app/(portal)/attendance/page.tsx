@@ -15,7 +15,8 @@ export default async function AttendancePage() {
   const [branches, groups, players, sessions, subs] = await Promise.all([
     supabase.from("branches").select("*").eq("is_active", true).order("created_at"),
     supabase.from("groups").select("*").eq("is_active", true).order("position"),
-    supabase.from("players").select("*").eq("archived", false).order("full_name"),
+    // archived players are loaded too: they still show on the past sessions they attended
+    supabase.from("players").select("*").order("full_name"),
     supabase.from("sessions").select("*").order("session_date", { ascending: false }).limit(120),
     canManage ? supabase.from("subscriptions").select("*").order("end_date", { ascending: false }) : Promise.resolve({ data: [] as Subscription[] }),
   ]);

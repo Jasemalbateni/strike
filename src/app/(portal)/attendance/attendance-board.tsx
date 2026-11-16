@@ -73,7 +73,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
           const safe = me.canManage ? row : { ...row, guardian_name: "", guardian_phone: "" };
           setPlayers((a) => {
             const next = a.some((x) => x.id === row.id) ? a.map((x) => (x.id === row.id ? { ...x, ...safe } : x)) : [...a, safe];
-            return next.filter((x) => !x.archived).sort((x, y) => x.full_name.localeCompare(y.full_name, "ar"));
+            return next.sort((x, y) => x.full_name.localeCompare(y.full_name, "ar"));
           });
         }
       })
@@ -106,12 +106,24 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
 
   const latestSub = (pid: string) => subscriptions.filter((s) => s.player_id === pid).sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
 
+  /** first day the player belongs to the academy: the earliest of his creation, trial and first subscription dates */
+  const joinDate = (p: Player) => {
+    const created = new Date(new Date(p.created_at).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10); // Kuwait day
+    const firstSub = subscriptions.filter((s) => s.player_id === p.id).map((s) => s.start_date).sort()[0];
+    return [created, p.trial_date, firstSub].filter((d): d is string => !!d).sort()[0];
+  };
+
   const roster = useMemo(() => {
     return players
       .filter((p) => p.branch_id === branchId && (!groupId || p.group_id === groupId))
-      .filter((p) => trialVisibleOn(p, date))
       .map((p) => {
         const a = session ? attendance.find((x) => x.session_id === session.id && x.player_id === p.id) : undefined;
+        return { p, a };
+      })
+      // a mark is history: whoever was marked on this date stays on it, even after he is archived.
+      // without a mark: archived players are hidden, and nobody shows on a date before he joined.
+      .filter(({ p, a }) => !!a || (!p.archived && date >= joinDate(p) && trialVisibleOn(p, date)))
+      .map(({ p, a }) => {
         const st = me.canManage ? subState(latestSub(p.id), date) : { state: "active" as const, daysLeft: null };
         return { p, a, st };
       })
@@ -358,7 +370,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                   st === "present" || st === "late" ? "border-ice bg-ice-50" : st === "absent" || st === "excused" ? "border-error/40 bg-error-100/60" : trial ? "border-gold/60 bg-gold-100/50" : "border-silver-200 bg-white",
                 )}
               >
-                <button onClick={() => cycle(r)} className="flex-1 min-w-0 text-start flex items-center gap-3 min-h-11" aria-label={`${r.p.full_name}: ${st === "present" ? "حاضر" : st === "absent" ? "غائب" : "بدون علامة"}`}>
+                <button onClick={() => cycle(r)} className="flex-1 min-w-0 text-start flex items-center gap-3 min-h-11" aria-label={`${r.p.full_name}: ${st === "present" || st === "late" ? "حاضر" : st ? "غائب" : "بدون علامة"}`}>
                   <span
                     className={clsx(
                       "h-9 w-9 shrink-0 rounded-full grid place-items-center font-extrabold transition",
@@ -379,7 +391,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                     </span>
                   </span>
                 </button>
-                {/* explicit late / excused (small) */}
+                {/* explicit late (small) */}
                 <div className="flex flex-col gap-1">
                   {trial && (
                     <button onClick={() => setOutcomeFor(r.p)} className="h-8 px-1.5 rounded-lg flex items-center justify-center gap-0.5 border border-gold bg-gold text-navy-900 text-[10.5px] font-extrabold" title="نتيجة التجربة" aria-label={`نتيجة تجربة ${r.p.full_name}`}>
@@ -388,9 +400,6 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                   )}
                   <button onClick={() => mark(r.p.id, st === "late" ? "present" : "late")} className={clsx("h-8 w-8 rounded-lg grid place-items-center border text-[11px] font-bold", st === "late" ? "bg-navy text-white border-navy" : "bg-white/70 text-ink-2 border-silver-200")} title="متأخر" aria-label="متأخر">
                     <Clock size={13} />
-                  </button>
-                  <button onClick={() => mark(r.p.id, st === "excused" ? "absent" : "excused")} className={clsx("h-8 w-8 rounded-lg grid place-items-center border text-[11px] font-bold", st === "excused" ? "bg-navy text-white border-navy" : "bg-white/70 text-ink-2 border-silver-200")} title="غياب بعذر" aria-label="غياب بعذر">
-                    ع
                   </button>
                 </div>
               </div>
