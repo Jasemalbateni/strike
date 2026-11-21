@@ -280,12 +280,6 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
         flash("كل تمرين يحتاج اسماً قبل الإرسال", "err");
         return false;
       }
-      const noPhys = drills.findIndex((d) => !isMatch(d) && !cleanPhysical(d.phys, d.phys2).phys);
-      if (noPhys >= 0) {
-        setActive(noPhys);
-        flash("اختر الهدف البدني الرئيسي لكل تمرين", "err");
-        return false;
-      }
     }
     setSaving(true);
     const payload = {
@@ -585,7 +579,7 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
             </div>
           </div>
           <div className="ds-field">
-            <label htmlFor="fPhys">الهدف البدني الرئيسي{curIsMatch ? " (اختياري)" : ""}</label>
+            <label htmlFor="fPhys">الهدف البدني الرئيسي (اختياري)</label>
             <select id="fPhys" value={curPhys.phys} onChange={(e) => setPhys(e.target.value)} disabled={readOnly}>
               <option value="">— اختر —</option>
               <optgroup label="المهارات الحركية الأساسية">
