@@ -15,6 +15,7 @@ import { BoardStatic } from "@/components/drills/render";
 import { exportBoardPlainPng } from "@/components/drills/export";
 import { boardDims, parseBoard } from "@/lib/drills/board";
 import type { Board } from "@/lib/drills/types";
+import { PHYSICAL, cleanPhysical, physicalLine, type PhysicalKey } from "@/lib/physical";
 import { fmtDate, isMatch, KIND_LABEL, lines, MATCH_FORMATS, newDrill, newMatch, SHEET_AGES, SHEET_CATEGORIES, SHEET_INTENSITY, SHEET_STATUS_LABEL, totalMinutes, type DrillSheet, type SheetDrill, type SheetKind, type SheetStatus } from "@/lib/sheets";
 import "./sheet.css";
 
@@ -137,6 +138,13 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
     setDirty(true);
   }
   const curIsMatch = isMatch(cur);
+  const curPhys = cleanPhysical(cur.phys, cur.phys2);
+  function setPhys(k: string) {
+    patch(cleanPhysical(k, cur.phys2));
+  }
+  function togglePhys2(k: PhysicalKey) {
+    patch({ phys2: curPhys.phys2.includes(k) ? curPhys.phys2.filter((x) => x !== k) : [...curPhys.phys2, k] });
+  }
   async function removeDrill(i: number) {
     if (drills.length <= 1) return;
     const d = drills[i];
@@ -270,6 +278,12 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
       const missing = drills.find((d) => !d.title.trim());
       if (missing) {
         flash("كل تمرين يحتاج اسماً قبل الإرسال", "err");
+        return false;
+      }
+      const noPhys = drills.findIndex((d) => !isMatch(d) && !cleanPhysical(d.phys, d.phys2).phys);
+      if (noPhys >= 0) {
+        setActive(noPhys);
+        flash("اختر الهدف البدني الرئيسي لكل تمرين", "err");
         return false;
       }
     }
@@ -570,6 +584,43 @@ export default function SheetBuilder({ sheet, me, authorName, reviewerName, toda
               </select>
             </div>
           </div>
+          <div className="ds-field">
+            <label htmlFor="fPhys">الهدف البدني الرئيسي{curIsMatch ? " (اختياري)" : ""}</label>
+            <select id="fPhys" value={curPhys.phys} onChange={(e) => setPhys(e.target.value)} disabled={readOnly}>
+              <option value="">— اختر —</option>
+              <optgroup label="المهارات الحركية الأساسية">
+                {PHYSICAL.filter((x) => x.family === "fms").map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="الصفات البدنية">
+                {PHYSICAL.filter((x) => x.family === "quality").map((x) => (
+                  <option key={x.key} value={x.key}>
+                    {x.label}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+            {curPhys.phys && <div className="hint">{PHYSICAL.find((x) => x.key === curPhys.phys)?.hint}</div>}
+          </div>
+          <div className="ds-field">
+            <label>أهداف بدنية ثانوية (اختياري)</label>
+            <div className="ds-chips">
+              {PHYSICAL.filter((x) => x.key !== curPhys.phys).map((x) => (
+                <button key={x.key} type="button" className={clsx("ds-chip", curPhys.phys2.includes(x.key) && "on")} aria-pressed={curPhys.phys2.includes(x.key)} onClick={() => togglePhys2(x.key)} disabled={readOnly} title={x.hint}>
+                  {x.label}
+                </button>
+              ))}
+            </div>
+            <div className="hint">
+              التصنيف من «المختبر الحركي» في المصادر —{" "}
+              <a href="/resources/movement-lab" target="_blank" rel="noreferrer">
+                افتحه للمراجعة
+              </a>
+            </div>
+          </div>
           {kind === "drill" && (
             <div className="ds-field">
               <label htmlFor="fDate">التاريخ</label>
@@ -783,6 +834,19 @@ function Foot({ coach }: { coach: string }) {
   );
 }
 
+/** the physical goal line of a printed sheet — only when the coach set one */
+function PhysLine({ d }: { d: SheetDrill }) {
+  const { phys, phys2 } = cleanPhysical(d.phys, d.phys2);
+  if (!phys && !phys2.length) return null;
+  return (
+    <div className="ds-phys">
+      <span>الهدف البدني</span>
+      <b>{physicalLine(phys, [])}</b>
+      {phys2.length > 0 && <em>+ {physicalLine("", phys2)}</em>}
+    </div>
+  );
+}
+
 function List({ text, cls }: { text: string; cls?: string }) {
   const L = lines(text);
   return (
@@ -819,6 +883,7 @@ export function DrillPage({ d, date, coach, kicker }: { d: SheetDrill; date: str
             <span>التاريخ</span>
           </div>
         </div>
+        <PhysLine d={d} />
 
         <div className="ds-diagram">
           {d.img ? (
@@ -995,6 +1060,7 @@ export function MatchPage({ d, date, coach, kicker }: { d: SheetDrill; date: str
             <span>التاريخ</span>
           </div>
         </div>
+        <PhysLine d={d} />
 
         {d.img ? (
           <div className="ds-diagram">

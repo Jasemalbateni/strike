@@ -13,6 +13,8 @@ import { ScoreBar, TrendChart } from "@/components/development/charts";
 import { PILLARS, SCORE_LABELS, TESTS, fmt1, overall, pillarAvg, pillarOf, testOf, type Evaluation, type Goal, type Pillar, type PlayerNote, type PlayerTest, type Scores } from "@/lib/development";
 import type { PlayerStats } from "@/lib/players";
 import type { StaffName } from "@/lib/types";
+import ContentSection from "@/components/development/content";
+import type { PlayerContent } from "@/lib/content";
 
 type PlayerHead = { id: string; full_name: string; age: number | null; group_name: string | null; kind: "subscriber" | "trial"; trial_date: string | null; created_at: string };
 type Tab = "evals" | "tests" | "goals" | "notes";
@@ -30,6 +32,7 @@ export default function PlayerFile({
   initialNotes,
   staff,
   stats,
+  content,
 }: {
   me: { id: string; isOwner: boolean };
   today: string;
@@ -40,6 +43,7 @@ export default function PlayerFile({
   initialNotes: PlayerNote[];
   staff: StaffName[];
   stats: PlayerStats | null;
+  content: PlayerContent;
 }) {
   const [evals, setEvals] = useState(initialEvals); // oldest → newest
   const [tests, setTests] = useState(initialTests);
@@ -161,6 +165,8 @@ export default function PlayerFile({
           </button>
         </div>
       )}
+
+      <ContentSection c={content} />
 
       {/* tabs */}
       <div className="flex gap-1.5 p-1 rounded-2xl bg-silver-100 w-fit max-w-full overflow-x-auto">

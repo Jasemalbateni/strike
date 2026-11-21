@@ -53,7 +53,9 @@ export type Subscription = {
 };
 
 export type Session = { id: string; branch_id: string; session_date: string; cancelled: boolean; notes: string };
-export type Attendance = { id: string; session_id: string; player_id: string; status: AttendanceStatus; marked_by: string | null; marked_at: string };
+/** squad = which half of the split session (A / B) the player trained with that day — chosen when marking attendance */
+export type Squad = "A" | "B";
+export type Attendance = { id: string; session_id: string; player_id: string; status: AttendanceStatus; squad?: Squad | null; marked_by: string | null; marked_at: string };
 
 export const SOURCES = ["إعلان انستغرام", "إعلان واتساب", "تيك توك", "توصية صديق", "أقارب", "مرّ بالملعب", "أخرى"];
 

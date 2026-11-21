@@ -29,6 +29,10 @@ export type SheetDrill = {
   img: string;
   /** the drawing (drills.id) this diagram was rendered from, if any — lets the coach reopen and redraw it */
   drill_id?: string | null;
+  /** main physical goal (a key of PHYSICAL in lib/physical) — one per drill */
+  phys?: string;
+  /** secondary physical goals */
+  phys2?: string[];
 };
 
 export type SheetStatus = "draft" | "pending" | "approved" | "returned";
@@ -108,6 +112,8 @@ export function newDrill(): SheetDrill {
     drill_id: null,
     type: "drill",
     format: "",
+    phys: "",
+    phys2: [],
   };
 }
 

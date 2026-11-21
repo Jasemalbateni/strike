@@ -908,3 +908,57 @@
   border-radius: 2mm;
   padding: 3mm 4mm;
 }
+
+/* physical goal: editor chips + the printed line */
+.ds-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ds-chip {
+  border: 1.5px solid var(--ds-silver);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 36px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ds-navy);
+  background: #fff;
+  cursor: pointer;
+}
+.ds-chip.on {
+  background: var(--ds-navy);
+  border-color: var(--ds-navy);
+  color: #fff;
+  font-weight: 700;
+}
+.ds-chip:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.ds-field .hint a {
+  color: var(--ds-navy);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.ds-phys {
+  display: flex;
+  align-items: baseline;
+  gap: 2.5mm;
+  margin-top: -2.5mm;
+  font-size: 10.5pt;
+  color: var(--ds-navy);
+}
+.ds-phys span {
+  font-size: 9.5pt;
+  font-weight: 500;
+  color: var(--ds-ink-2);
+}
+.ds-phys b {
+  font-weight: 800;
+}
+.ds-phys em {
+  font-style: normal;
+  color: var(--ds-ink-2);
+}

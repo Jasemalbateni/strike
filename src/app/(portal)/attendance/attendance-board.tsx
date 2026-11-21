@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal, Field } from "@/components/ui";
 import { useConfirm } from "@/components/confirm";
 import TrialsLog from "@/components/players/trials-log";
-import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, fmtDate, isTrainingDay, nthSessionDate, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Subscription } from "@/lib/players";
+import { DAY_SHORT, NOT_REGISTERED_REASONS, REMOVE_REASONS, fmtDate, isTrainingDay, nthSessionDate, subState, trialVisibleOn, type TrialOutcome, type Attendance, type AttendanceStatus, type Branch, type Group, type Player, type Session, type Squad, type Subscription } from "@/lib/players";
 import { bidi } from "@/lib/bidi";
 
 type Props = {
@@ -163,6 +163,17 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
     return s;
   }
 
+  /** the squad the player trained with most recently (before the viewed date) — the default when he is marked present */
+  function lastSquad(playerId: string): Squad | null {
+    let best: { d: string; q: Squad } | null = null;
+    for (const a of attendance) {
+      if (a.player_id !== playerId || !a.squad) continue;
+      const d = sessions.find((x) => x.id === a.session_id)?.session_date;
+      if (d && d < date && (!best || d > best.d)) best = { d, q: a.squad };
+    }
+    return best?.q ?? null;
+  }
+
   async function mark(playerId: string, status: AttendanceStatus | null) {
     const s = await ensureSession();
     if (!s) return;
@@ -174,15 +185,29 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
       if (error) flash("تعذر الحفظ");
       return;
     }
-    const optimistic: Attendance = existing ? { ...existing, status } : { id: "tmp-" + playerId, session_id: s.id, player_id: playerId, status, marked_by: me.id, marked_at: new Date().toISOString() };
+    // an absent player trained with nobody; a present one keeps his squad, or starts from the one he had last time
+    const squad: Squad | null = status === "absent" || status === "excused" ? null : (existing?.squad ?? lastSquad(playerId));
+    const optimistic: Attendance = existing ? { ...existing, status, squad } : { id: "tmp-" + playerId, session_id: s.id, player_id: playerId, status, squad, marked_by: me.id, marked_at: new Date().toISOString() };
     setAttendance((a) => (existing ? a.map((x) => (x.id === existing.id ? optimistic : x)) : [...a, optimistic]));
-    const { data, error } = await supabase.from("attendance").upsert({ session_id: s.id, player_id: playerId, status }, { onConflict: "session_id,player_id" }).select("*").single();
+    const { data, error } = await supabase.from("attendance").upsert({ session_id: s.id, player_id: playerId, status, squad }, { onConflict: "session_id,player_id" }).select("*").single();
     if (error || !data) {
       flash("تعذر الحفظ — تحقق من الاتصال");
       setAttendance((a) => a.filter((x) => x.id !== optimistic.id));
       return;
     }
     setAttendance((a) => a.map((x) => (x.id === optimistic.id || x.id === data.id ? (data as Attendance) : x)).filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i));
+  }
+
+  /** A / B for a present player (tap the active one again to clear it) */
+  async function setSquad(a: Attendance, q: Squad) {
+    const squad = a.squad === q ? null : q;
+    setAttendance((list) => list.map((x) => (x.id === a.id ? { ...x, squad } : x)));
+    if (a.id.startsWith("tmp-")) return; // still saving: the row lands with its default squad
+    const { error } = await supabase.from("attendance").update({ squad }).eq("id", a.id);
+    if (error) {
+      flash("تعذر حفظ المجموعة");
+      setAttendance((list) => list.map((x) => (x.id === a.id ? { ...x, squad: a.squad ?? null } : x)));
+    }
   }
 
   /** tap on the card: none → present → absent → none */
@@ -273,7 +298,7 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <h1 className="display text-navy text-[26px] sm:text-[36px] leading-none">الحضور</h1>
-          <p className="text-ink-2 text-sm mt-1.5">اضغط على اسم اللاعب: مرة = حاضر، مرتين = غائب، ثلاث = إلغاء.</p>
+          <p className="text-ink-2 text-sm mt-1.5">اضغط على اسم اللاعب: مرة = حاضر، مرتين = غائب، ثلاث = إلغاء. وللحاضر اختر مجموعته A أو B.</p>
         </div>
         {me.canManage && (
           <div className="flex gap-2">
@@ -391,6 +416,22 @@ export default function AttendanceBoard({ me, today, branches, groups, initialPl
                     </span>
                   </span>
                 </button>
+                {/* squad of the day: only for a player who is here */}
+                {r.a && (st === "present" || st === "late") && (
+                  <div className="flex gap-1" role="group" aria-label={`مجموعة ${r.p.full_name}`}>
+                    {(["A", "B"] as const).map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => setSquad(r.a!, q)}
+                        aria-pressed={r.a!.squad === q}
+                        aria-label={`مجموعة ${q}`}
+                        className={clsx("num h-10 w-9 rounded-lg grid place-items-center border text-[15px] font-bold", r.a!.squad === q ? "bg-navy text-white border-navy" : "bg-white/70 text-ink-2 border-silver-200")}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* explicit late (small) */}
                 <div className="flex flex-col gap-1">
                   {trial && (
